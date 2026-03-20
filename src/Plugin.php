@@ -62,12 +62,24 @@ final class Plugin {
 		// Register custom post types and their metadata fields.
 		PostTypes::init();
 
-		// If a fresh activation set the flush-transient, CPTs will be registered
-		// in subsequent wiring below. Flush rewrite rules here, after CPTs are
-		// registered, so the rules include the new post types.
-		if ( get_transient( 'cb_flush_rewrite_rules' ) ) {
-			delete_transient( 'cb_flush_rewrite_rules' );
-			flush_rewrite_rules();
+		// Flush rewrite rules after CPTs are registered (priority 10 and 15).
+		// Must run on the init action at a later priority so CPTs exist first.
+		\add_action( 'init', [ self::class, 'maybe_flush_rewrite_rules' ], 20 );
+	}
+
+	/**
+	 * Flush rewrite rules once after a fresh activation.
+	 *
+	 * Hooked to init at priority 20, after CPTs are registered at priorities
+	 * 10 and 15, so the rewrite rules include all custom post types.
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	public function maybe_flush_rewrite_rules(): void {
+		if ( \get_transient( 'cb_flush_rewrite_rules' ) ) {
+			\delete_transient( 'cb_flush_rewrite_rules' );
+			\flush_rewrite_rules();
 		}
 	}
 }

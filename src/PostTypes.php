@@ -346,7 +346,7 @@ final class PostTypes {
 				'description'       => 'Creation timestamp (ISO 8601)',
 				'single'            => true,
 				'show_in_rest'      => false,
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ self::class, 'sanitize_iso8601' ],
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
 			'cbtermination_due_utc'  => [
@@ -362,7 +362,7 @@ final class PostTypes {
 				'description'       => 'Last provider sync timestamp',
 				'single'            => true,
 				'show_in_rest'      => false,
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ self::class, 'sanitize_iso8601' ],
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
 		];
@@ -379,12 +379,12 @@ final class PostTypes {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param bool   $allowed Whether access is allowed.
-	 * @param string $meta_key Meta key being accessed.
-	 * @param int    $post_id Post ID.
-	 * @param int    $user_id User ID.
-	 * @param string $cap Current user's capability.
-	 * @param array  $caps User's capabilities.
+	 * @param bool              $allowed Whether access is allowed.
+	 * @param string            $meta_key Meta key being accessed.
+	 * @param int               $post_id Post ID.
+	 * @param int               $user_id User ID.
+	 * @param string            $cap Current user's capability.
+	 * @param array<int,string> $caps User's capabilities.
 	 *
 	 * @return bool True if user has manage_cloud_bridge capability.
 	 */
@@ -413,16 +413,17 @@ final class PostTypes {
 	}
 
 	/**
-	 * Sanitize price to float.
+	 * Sanitize price to a non-negative float.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param mixed $value Price value.
 	 *
-	 * @return float Sanitized price.
+	 * @return float Sanitized non-negative price.
 	 */
 	public static function sanitize_price( $value ): float {
-		return (float) $value;
+		$price = (float) $value;
+		return max( 0.0, $price );
 	}
 
 	/**
@@ -447,7 +448,12 @@ final class PostTypes {
 		}
 
 		// Re-encode to ensure valid JSON format.
-		return \json_encode( $decoded, JSON_UNESCAPED_SLASHES );
+		$encoded = \json_encode( $decoded, JSON_UNESCAPED_SLASHES );
+		if ( false === $encoded ) {
+			return '[]';
+		}
+
+		return $encoded;
 	}
 
 	/**
@@ -471,6 +477,25 @@ final class PostTypes {
 	}
 
 	/**
+	 * Sanitize a required ISO 8601 timestamp.
+	 *
+	 * Returns empty string only if the value does not match ISO 8601 format.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param string $value Timestamp value.
+	 *
+	 * @return string Sanitized timestamp or empty string.
+	 */
+	public static function sanitize_iso8601( string $value ): string {
+		if ( \preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/', $value ) ) {
+			return \sanitize_text_field( $value );
+		}
+
+		return '';
+	}
+
+	/**
 	 * Sanitize nullable ISO 8601 timestamp.
 	 *
 	 * Accepts ISO 8601 format or empty string (null representation).
@@ -486,11 +511,6 @@ final class PostTypes {
 			return '';
 		}
 
-		// Very basic ISO 8601 validation.
-		if ( \preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/', $value ) ) {
-			return \sanitize_text_field( $value );
-		}
-
-		return '';
+		return self::sanitize_iso8601( $value );
 	}
 }
