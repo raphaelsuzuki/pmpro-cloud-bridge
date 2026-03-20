@@ -24,11 +24,14 @@ if ( '1' !== get_option( 'cb_uninstall_remove_data', '0' ) ) {
 	return;
 }
 
-// Load Composer autoloader so we can use the Installer class.
+// Load the Installer class: prefer the Composer autoloader, fall back to a
+// direct require so cleanup always runs even on environments where `composer
+// install` has not been run (e.g. edge cases during CI teardown).
 $autoload = __DIR__ . '/vendor/autoload.php';
-if ( ! file_exists( $autoload ) ) {
-	return;
+if ( file_exists( $autoload ) ) {
+	require_once $autoload;
+} else {
+	require_once __DIR__ . '/src/Installer.php';
 }
-require_once $autoload;
 
 \CloudBridge\Installer::uninstall();

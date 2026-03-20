@@ -32,7 +32,7 @@ final class HetznerDriver extends AbstractProvider {
 	public function get_api_version(): string { return 'v1'; }
 
 	public function validate_credentials(): ProviderResult { return ProviderResult::fail( 'unsupported', 'HetznerDriver not yet implemented.' ); }
-	public function get_capabilities(): array { return [ 'rebuild' => true, 'console' => false, 'resize' => false ]; }
+	public function get_capabilities(): array { return [ 'rebuild' => false, 'console' => false, 'resize' => false ]; }
 	public function get_actions( string $provider_instance_id, array $settings ): array { return []; }
 	public function provision( ProvisionRequest $request ): ProviderResult { return ProviderResult::fail( 'unsupported', 'Not yet implemented.' ); }
 	public function destroy( string $provider_instance_id ): ProviderResult { return ProviderResult::fail( 'unsupported', 'Not yet implemented.' ); }

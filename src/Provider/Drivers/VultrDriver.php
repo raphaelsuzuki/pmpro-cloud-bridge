@@ -42,7 +42,7 @@ final class VultrDriver extends AbstractProvider {
 	}
 
 	public function get_capabilities(): array {
-		return [ 'rebuild' => true, 'console' => false, 'resize' => false ];
+		return [ 'rebuild' => false, 'console' => false, 'resize' => false ];
 	}
 
 	public function get_actions( string $provider_instance_id, array $settings ): array { return []; }

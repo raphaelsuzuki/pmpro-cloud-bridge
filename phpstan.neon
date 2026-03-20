@@ -14,7 +14,4 @@ parameters:
         - tests/
 
     # WordPress globals are provided by szepeviktor/phpstan-wordpress stubs.
-    bootstrapFiles:
-        - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
-
     ignoreErrors: []

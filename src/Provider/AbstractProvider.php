@@ -47,7 +47,14 @@ abstract class AbstractProvider implements CloudProviderInterface {
 		];
 
 		if ( null !== $body ) {
-			$args['body'] = wp_json_encode( $body );
+			$encoded = wp_json_encode( $body );
+			if ( false === $encoded ) {
+				return ProviderResult::fail(
+					'api_error',
+					sprintf( 'Failed to JSON-encode provider request body: %s', json_last_error_msg() )
+				);
+			}
+			$args['body'] = $encoded;
 		}
 
 		$response = wp_remote_request( $url, $args );

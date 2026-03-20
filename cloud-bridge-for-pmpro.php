@@ -68,30 +68,47 @@ function cb_check_dependencies(): bool {
 		return true;
 	}
 
-	// Deactivate the plugin and show a notice.
-	add_action(
-		'admin_notices',
-		static function () use ( $missing ): void {
-			$list = '<ul><li>' . implode( '</li><li>', array_map( 'esc_html', $missing ) ) . '</li></ul>';
-			printf(
-				'<div class="notice notice-error"><p><strong>%s</strong></p>%s</div>',
-				esc_html__( 'Cloud Bridge for PMPro has been deactivated. The following required plugins are missing or outdated:', 'cloud-bridge-for-pmpro' ),
-				wp_kses_post( $list )
-			);
+	// Persist the notice so it survives the redirect after deactivation and so
+	// non-admin requests (cron, AJAX) surface the problem on the next admin load.
+	$list = '<ul><li>' . implode( '</li><li>', array_map( 'esc_html', $missing ) ) . '</li></ul>';
+	set_transient( 'cb_dependency_notice', $list, DAY_IN_SECONDS );
+
+	// Only self-deactivate from an admin or activation context.  On cron/AJAX
+	// the plugin simply skips bootstrap (the early return below is sufficient).
+	if ( is_admin() ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		deactivate_plugins( plugin_basename( __FILE__ ) );
+
+		// Prevent the "Plugin activated." success banner.
+		if ( isset( $_GET['activate'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			unset( $_GET['activate'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
-	);
-
-	// Deactivate without triggering uninstall hooks.
-	require_once ABSPATH . 'wp-admin/includes/plugin.php';
-	deactivate_plugins( plugin_basename( __FILE__ ) );
-
-	// Prevent the "Plugin activated." notice.
-	if ( isset( $_GET['activate'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		unset( $_GET['activate'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	return false;
 }
+
+/**
+ * Displays a persisted dependency error notice on any admin page.
+ *
+ * The transient is created by cb_check_dependencies() and auto-expires after
+ * one day, so the notice disappears once the issue is resolved.
+ */
+function cb_dependency_admin_notice(): void {
+	$list = get_transient( 'cb_dependency_notice' );
+	if ( false === $list ) {
+		return;
+	}
+
+	delete_transient( 'cb_dependency_notice' );
+
+	printf(
+		'<div class="notice notice-error"><p><strong>%s</strong></p>%s</div>',
+		esc_html__( 'Cloud Bridge for PMPro has been deactivated. The following required plugins are missing or outdated:', 'cloud-bridge-for-pmpro' ),
+		wp_kses_post( (string) $list )
+	);
+}
+add_action( 'admin_notices', 'cb_dependency_admin_notice' );
 
 /**
  * Initialises the plugin after all plugins have loaded.
@@ -146,7 +163,21 @@ function cb_activate( bool $network_wide ): void {
 		return;
 	}
 
-	require_once CB_PLUGIN_DIR . 'vendor/autoload.php';
+	$autoload = CB_PLUGIN_DIR . 'vendor/autoload.php';
+	if ( ! file_exists( $autoload ) ) {
+		add_action(
+			'admin_notices',
+			static function (): void {
+				printf(
+					'<div class="notice notice-error"><p>%s</p></div>',
+					esc_html__( 'Cloud Bridge for PMPro: Composer autoloader not found. Please run `composer install` in the plugin directory.', 'cloud-bridge-for-pmpro' )
+				);
+			}
+		);
+		return;
+	}
+
+	require_once $autoload;
 
 	\CloudBridge\Installer::activate( $network_wide );
 }

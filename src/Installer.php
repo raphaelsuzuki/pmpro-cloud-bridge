@@ -34,6 +34,12 @@ final class Installer {
 	 */
 	public const UNINSTALL_REMOVE_DATA_OPTION = 'cb_uninstall_remove_data';
 
+	/**
+	 * Transient key set on activation to trigger a rewrite-rules flush once
+	 * Plugin::init() has registered all CPTs.
+	 */
+	private const FLUSH_RULES_TRANSIENT = 'cb_flush_rewrite_rules';
+
 	// -------------------------------------------------------------------------
 	// Activation
 	// -------------------------------------------------------------------------
@@ -41,8 +47,10 @@ final class Installer {
 	/**
 	 * Runs on plugin activation.
 	 *
-	 * Creates/upgrades custom DB tables, registers the custom capability on the
-	 * Administrator role, and flushes rewrite rules so CPTs resolve correctly.
+	 * Creates/upgrades custom DB tables and registers the custom capability on
+	 * the Administrator role. Sets a transient so that Plugin::init() can flush
+	 * rewrite rules AFTER CPTs have been registered (calling flush_rewrite_rules
+	 * here would persist stale rules because CPTs are not registered yet).
 	 *
 	 * @param bool $network_wide Whether the plugin is activated network-wide (multisite).
 	 * @return void
@@ -51,9 +59,9 @@ final class Installer {
 		self::install_schema();
 		self::register_capabilities();
 
-		// CPT rewrite rules will be registered by Plugin::init() on the next
-		// request; flushing here makes them available immediately after activation.
-		flush_rewrite_rules();
+		// Signal Plugin::init() to flush rewrite rules on the next load, once
+		// CPTs are registered.
+		set_transient( self::FLUSH_RULES_TRANSIENT, '1', MINUTE_IN_SECONDS * 5 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -75,6 +83,25 @@ final class Installer {
 	}
 
 	// -------------------------------------------------------------------------
+	// DB upgrade (runs on every plugin load)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Runs schema migrations whenever the stored DB version is behind the code.
+	 *
+	 * Must be called from Plugin::init() so upgrades run on every plugin load,
+	 * not only on activation (activation hooks do not fire during normal updates).
+	 *
+	 * @return void
+	 */
+	public static function maybe_upgrade(): void {
+		$installed = (string) get_option( self::DB_VERSION_OPTION, '' );
+		if ( $installed !== self::DB_VERSION ) {
+			self::install_schema();
+		}
+	}
+
+	// -------------------------------------------------------------------------
 	// Uninstall (deletion)
 	// -------------------------------------------------------------------------
 
@@ -93,8 +120,17 @@ final class Installer {
 		$wpdb->query( "DROP TABLE IF EXISTS `{$wpdb->prefix}cb_events`" );           // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange
 		$wpdb->query( "DROP TABLE IF EXISTS `{$wpdb->prefix}cb_provision_intents`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange
 
-		// Delete all plugin options.
-		$wpdb->query( "DELETE FROM `{$wpdb->options}` WHERE `option_name` LIKE 'cb_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		// Delete all plugin options using an explicit allowlist to avoid
+		// accidentally removing options from other plugins that share the cb_ prefix.
+		foreach (
+			[
+				self::DB_VERSION_OPTION,
+				self::UNINSTALL_REMOVE_DATA_OPTION,
+				self::FLUSH_RULES_TRANSIENT,
+			] as $option_key
+		) {
+			delete_option( $option_key );
+		}
 
 		// Delete all CPT posts and their meta.
 		foreach ( [ 'cb_instance', 'cb_plan' ] as $post_type ) {
@@ -112,10 +148,6 @@ final class Installer {
 
 		// Remove the custom capability from all roles.
 		self::remove_capabilities();
-
-		// Remove the DB version option.
-		delete_option( self::DB_VERSION_OPTION );
-		delete_option( self::UNINSTALL_REMOVE_DATA_OPTION );
 	}
 
 	// -------------------------------------------------------------------------

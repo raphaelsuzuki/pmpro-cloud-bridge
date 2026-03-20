@@ -62,6 +62,17 @@ final class ProviderRegistry {
 
 		$this->drivers = [];
 
+		if ( ! is_array( $raw ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log(
+				sprintf(
+					'[CloudBridge] Ignoring cloud_bridge_providers filter result: expected array, got %s.',
+					gettype( $raw )
+				)
+			);
+			return;
+		}
+
 		foreach ( $raw as $id => $driver ) {
 			if ( ! $driver instanceof CloudProviderInterface ) {
 				// Log and skip non-conforming drivers rather than crashing.
