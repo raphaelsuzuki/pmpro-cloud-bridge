@@ -59,6 +59,9 @@ final class Plugin {
 		// manual deactivate/reactivate cycle to apply schema changes.
 		Installer::maybe_upgrade();
 
+		// Register custom post types and their metadata fields.
+		PostTypes::init();
+
 		// If a fresh activation set the flush-transient, CPTs will be registered
 		// in subsequent wiring below. Flush rewrite rules here, after CPTs are
 		// registered, so the rules include the new post types.
