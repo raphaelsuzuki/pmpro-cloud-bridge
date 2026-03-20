@@ -122,7 +122,7 @@ final class PostTypes {
 	 */
 	private static function register_plan_meta(): void {
 		$meta_keys = [
-			'provider'         => [
+			'cb_provider'         => [
 				'type'              => 'string',
 				'description'       => 'Cloud provider identifier',
 				'single'            => true,
@@ -130,7 +130,7 @@ final class PostTypes {
 				'sanitize_callback' => 'sanitize_text_field',
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
-			'plan_slug'        => [
+			'cb_plan_slug'        => [
 				'type'              => 'string',
 				'description'       => "Provider's plan identifier",
 				'single'            => true,
@@ -138,7 +138,7 @@ final class PostTypes {
 				'sanitize_callback' => 'sanitize_text_field',
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
-			'billing_mode'     => [
+			'cb_billing_mode'     => [
 				'type'              => 'string',
 				'description'       => "Billing mode: 'hourly' or 'monthly'",
 				'single'            => true,
@@ -146,7 +146,7 @@ final class PostTypes {
 				'sanitize_callback' => [ self::class, 'sanitize_billing_mode' ],
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
-			'max_instances'    => [
+			'cb_max_instances'    => [
 				'type'              => 'integer',
 				'description'       => 'Maximum instances per subscription',
 				'single'            => true,
@@ -154,7 +154,7 @@ final class PostTypes {
 				'sanitize_callback' => 'intval',
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
-			'base_price'       => [
+			'cb_base_price'       => [
 				'type'              => 'number',
 				'description'       => 'Monthly price in USD',
 				'single'            => true,
@@ -162,7 +162,7 @@ final class PostTypes {
 				'sanitize_callback' => [ self::class, 'sanitize_price' ],
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
-			'allowed_regions'  => [
+			'cb_allowed_regions'  => [
 				'type'              => 'string',
 				'description'       => 'JSON array of region identifiers',
 				'single'            => true,
@@ -170,7 +170,7 @@ final class PostTypes {
 				'sanitize_callback' => [ self::class, 'sanitize_json_array' ],
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
-			'allowed_images'   => [
+			'cb_allowed_images'   => [
 				'type'              => 'string',
 				'description'       => 'JSON array of OS image identifiers',
 				'single'            => true,
@@ -178,7 +178,7 @@ final class PostTypes {
 				'sanitize_callback' => [ self::class, 'sanitize_json_array' ],
 				'auth_callback'     => [ self::class, 'auth_callback' ],
 			],
-			'grace_period_days' => [
+			'cb_grace_period_days' => [
 				'type'              => 'integer',
 				'description'       => 'Grace period before suspension (days)',
 				'single'            => true,
