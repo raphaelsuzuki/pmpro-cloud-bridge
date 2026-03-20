@@ -1,0 +1,17 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 6
+
+    paths:
+        - cloud-bridge-for-pmpro.php
+        - uninstall.php
+        - src/
+
+    excludePaths:
+        - vendor/
+        - tests/
+
+    # WordPress globals are provided by szepeviktor/phpstan-wordpress stubs.
+    ignoreErrors: []
