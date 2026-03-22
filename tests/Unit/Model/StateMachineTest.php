@@ -40,6 +40,7 @@ class StateMachineTest extends TestCase {
 			'provisioning to cancel requested'=> [ InstanceStatus::PROVISIONING, InstanceStatus::CANCEL_REQUESTED ],
 			'active to stopping'              => [ InstanceStatus::ACTIVE, InstanceStatus::STOPPING ],
 			'active to rebuilding'            => [ InstanceStatus::ACTIVE, InstanceStatus::REBUILDING ],
+			'active to rebooting'             => [ InstanceStatus::ACTIVE, InstanceStatus::REBOOTING ],
 			'active to suspended'             => [ InstanceStatus::ACTIVE, InstanceStatus::SUSPENDED ],
 			'active to cancel requested'      => [ InstanceStatus::ACTIVE, InstanceStatus::CANCEL_REQUESTED ],
 			'suspended to active'             => [ InstanceStatus::SUSPENDED, InstanceStatus::ACTIVE ],
@@ -109,5 +110,19 @@ class StateMachineTest extends TestCase {
 			[ InstanceStatus::TERMINATED ],
 			InstanceStateMachine::allowed_targets( InstanceStatus::CANCELLED )
 		);
+	}
+
+	public function test_can_transition_rejects_unknown_current_status(): void {
+		$this->expectException( \LogicException::class );
+		$this->expectExceptionMessage( 'Unknown current status' );
+
+		InstanceStateMachine::can_transition( 'INVALID', InstanceStatus::ACTIVE );
+	}
+
+	public function test_can_transition_rejects_unknown_target_status(): void {
+		$this->expectException( \LogicException::class );
+		$this->expectExceptionMessage( 'Unknown target status' );
+
+		InstanceStateMachine::can_transition( InstanceStatus::ACTIVE, 'INVALID' );
 	}
 }

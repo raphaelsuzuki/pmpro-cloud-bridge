@@ -64,5 +64,7 @@ final class InstanceStatus {
 		return in_array( $status, self::ALL, true );
 	}
 
-	private function __construct() {}
+	private function __construct() {
+		// Intentionally empty: this is a constants-only utility class.
+	}
 }

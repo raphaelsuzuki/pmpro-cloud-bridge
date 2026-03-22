@@ -29,7 +29,7 @@ final class InstanceStateMachine {
 		InstanceStatus::PROVISIONING_QUEUED  => [ InstanceStatus::PROVISIONING ],
 		InstanceStatus::PROVISIONING_PENDING => [ InstanceStatus::PROVISIONING, InstanceStatus::CANCEL_REQUESTED ],
 		InstanceStatus::PROVISIONING         => [ InstanceStatus::ACTIVE, InstanceStatus::CANCEL_REQUESTED, InstanceStatus::PROVISION_FAILED ],
-		InstanceStatus::ACTIVE               => [ InstanceStatus::SUSPENDED, InstanceStatus::CANCEL_REQUESTED, InstanceStatus::REBUILDING, InstanceStatus::STOPPING ],
+		InstanceStatus::ACTIVE               => [ InstanceStatus::SUSPENDED, InstanceStatus::CANCEL_REQUESTED, InstanceStatus::REBUILDING, InstanceStatus::STOPPING, InstanceStatus::REBOOTING ],
 		InstanceStatus::SUSPENDED            => [ InstanceStatus::ACTIVE, InstanceStatus::TERMINATION_QUEUED ],
 		InstanceStatus::STOPPED              => [ InstanceStatus::STARTING ],
 		InstanceStatus::STARTING             => [ InstanceStatus::ACTIVE ],
@@ -78,8 +78,18 @@ final class InstanceStateMachine {
 
 	/**
 	 * Returns true when the transition is allowed by the map.
+	 *
+	 * @throws \LogicException When either status value is unknown.
 	 */
 	public static function can_transition( string $current_status, string $new_status ): bool {
+		if ( ! InstanceStatus::is_valid( $current_status ) ) {
+			throw new \LogicException( sprintf( 'Unknown current status "%s".', $current_status ) );
+		}
+
+		if ( ! InstanceStatus::is_valid( $new_status ) ) {
+			throw new \LogicException( sprintf( 'Unknown target status "%s".', $new_status ) );
+		}
+
 		$allowed = self::ALLOWED_TRANSITIONS[ $current_status ] ?? [];
 
 		return in_array( $new_status, $allowed, true );
