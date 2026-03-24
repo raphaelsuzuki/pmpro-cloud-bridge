@@ -105,6 +105,6 @@ final class InstanceStateMachine {
 			throw new \LogicException( sprintf( 'Unknown current status "%s".', $current_status ) );
 		}
 
-		return self::ALLOWED_TRANSITIONS[ $current_status ];
+		return self::ALLOWED_TRANSITIONS[ $current_status ] ?? [];
 	}
 }

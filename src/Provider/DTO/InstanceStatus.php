@@ -45,7 +45,7 @@ final class InstanceStatus {
 	 *
 	 * @var string[]
 	 */
-	public const ALL = [
+	public const ALL = array(
 		self::PROVISIONING_QUEUED,
 		self::PROVISIONING_PENDING,
 		self::PROVISIONING,
@@ -63,14 +63,14 @@ final class InstanceStatus {
 		self::TERMINATION_QUEUED,
 		self::TERMINATED,
 		self::ERROR,
-	];
+	);
 
 	/**
 	 * Transitional states — those that trigger active polling.
 	 *
 	 * @var string[]
 	 */
-	public const TRANSITIONAL = [
+	public const TRANSITIONAL = array(
 		self::PROVISIONING_QUEUED,
 		self::PROVISIONING_PENDING,
 		self::PROVISIONING,
@@ -81,7 +81,7 @@ final class InstanceStatus {
 		self::CANCEL_REQUESTED,
 		self::CANCELLING,
 		self::TERMINATION_QUEUED,
-	];
+	);
 
 	/** Prevent instantiation — this class is a namespace for constants only. */
 	private function __construct() {}

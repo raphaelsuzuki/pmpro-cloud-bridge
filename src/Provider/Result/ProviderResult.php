@@ -23,9 +23,11 @@ final class ProviderResult {
 	/**
 	 * Valid error code constants.
 	 *
+	 * One of: auth_failed, not_found, rate_limited, quota_exceeded, invalid_plan, api_error, http_error, unsupported.
+	 *
 	 * @var string[]
 	 */
-	public const ERROR_CODES = [
+	public const ERROR_CODES = array(
 		'auth_failed',
 		'not_found',
 		'rate_limited',
@@ -34,17 +36,19 @@ final class ProviderResult {
 		'api_error',
 		'http_error',
 		'unsupported',
-	];
+	);
 
 	/**
-	 * @param bool        $ok            Whether the operation succeeded.
-	 * @param mixed       $data          The unwrapped value on success (null on failure).
-	 * @param string      $error_code    One of ERROR_CODES on failure; empty string on success.
-	 * @param string      $error_message Human-readable failure description.
+	 * Constructor sets operation state and result data.
+	 *
+	 * @param bool   $ok            Whether the operation succeeded.
+	 * @param mixed  $data          The unwrapped value on success (null on failure).
+	 * @param string $error_code    One of ERROR_CODES on failure; empty string on success.
+	 * @param string $error_message Human-readable failure description.
 	 */
 	private function __construct(
-		private readonly bool   $ok,
-		private readonly mixed  $data,
+		private readonly bool $ok,
+		private readonly mixed $data,
 		private readonly string $error_code,
 		private readonly string $error_message,
 	) {}
@@ -53,7 +57,7 @@ final class ProviderResult {
 	 * Creates a successful result.
 	 *
 	 * @template U
-	 * @param mixed $data The value to wrap.
+	 * @param U $data The value to wrap.
 	 * @return self<U>
 	 */
 	public static function ok( mixed $data = null ): self {
@@ -84,9 +88,9 @@ final class ProviderResult {
 	 */
 	public function unwrap(): mixed {
 		if ( ! $this->ok ) {
-			throw new \LogicException(
-				sprintf( 'Called unwrap() on a failed ProviderResult: [%s] %s', $this->error_code, $this->error_message )
-			);
+			$msg = sprintf( 'Called unwrap() on a failed ProviderResult: [%s] %s', $this->error_code, $this->error_message );
+			// @codingStandardsIgnoreLine
+			throw new \LogicException( $msg );
 		}
 
 		return $this->data;
