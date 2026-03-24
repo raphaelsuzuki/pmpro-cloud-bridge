@@ -1,4 +1,5 @@
 <?php
+
 /**
  * InstanceStatus — all valid instance status values.
  *
@@ -20,69 +21,71 @@ namespace CloudBridge\Provider\DTO;
  * stored directly in WordPress meta without casting. Constants on a final class
  * keep things simple and PHPStan-friendly while allowing direct string comparison.
  */
-final class InstanceStatus {
+final class InstanceStatus
+{
+    public const PROVISIONING_QUEUED  = 'PROVISIONING_QUEUED';
+    public const PROVISIONING_PENDING = 'PROVISIONING_PENDING';
+    public const PROVISIONING         = 'PROVISIONING';
+    public const ACTIVE               = 'ACTIVE';
+    public const SUSPENDED            = 'SUSPENDED';
+    public const STOPPED              = 'STOPPED';
+    public const STARTING             = 'STARTING';
+    public const STOPPING             = 'STOPPING';
+    public const REBOOTING            = 'REBOOTING';
+    public const REBUILDING           = 'REBUILDING';
+    public const PROVISION_FAILED     = 'PROVISION_FAILED';
+    public const CANCEL_REQUESTED     = 'CANCEL_REQUESTED';
+    public const CANCELLING           = 'CANCELLING';
+    public const CANCELLED            = 'CANCELLED';
+    public const TERMINATION_QUEUED   = 'TERMINATION_QUEUED';
+    public const TERMINATED           = 'TERMINATED';
+    public const ERROR                = 'ERROR';
 
-	public const PROVISIONING_QUEUED  = 'PROVISIONING_QUEUED';
-	public const PROVISIONING_PENDING = 'PROVISIONING_PENDING';
-	public const PROVISIONING         = 'PROVISIONING';
-	public const ACTIVE               = 'ACTIVE';
-	public const SUSPENDED            = 'SUSPENDED';
-	public const STOPPED              = 'STOPPED';
-	public const STARTING             = 'STARTING';
-	public const STOPPING             = 'STOPPING';
-	public const REBOOTING            = 'REBOOTING';
-	public const REBUILDING           = 'REBUILDING';
-	public const PROVISION_FAILED     = 'PROVISION_FAILED';
-	public const CANCEL_REQUESTED     = 'CANCEL_REQUESTED';
-	public const CANCELLING           = 'CANCELLING';
-	public const CANCELLED            = 'CANCELLED';
-	public const TERMINATION_QUEUED   = 'TERMINATION_QUEUED';
-	public const TERMINATED           = 'TERMINATED';
-	public const ERROR                = 'ERROR';
+    /**
+     * All valid status values.
+     *
+     * @var string[]
+     */
+    public const ALL = array(
+        self::PROVISIONING_QUEUED,
+        self::PROVISIONING_PENDING,
+        self::PROVISIONING,
+        self::ACTIVE,
+        self::SUSPENDED,
+        self::STOPPED,
+        self::STARTING,
+        self::STOPPING,
+        self::REBOOTING,
+        self::REBUILDING,
+        self::PROVISION_FAILED,
+        self::CANCEL_REQUESTED,
+        self::CANCELLING,
+        self::CANCELLED,
+        self::TERMINATION_QUEUED,
+        self::TERMINATED,
+        self::ERROR,
+    );
 
-	/**
-	 * All valid status values.
-	 *
-	 * @var string[]
-	 */
-	public const ALL = array(
-		self::PROVISIONING_QUEUED,
-		self::PROVISIONING_PENDING,
-		self::PROVISIONING,
-		self::ACTIVE,
-		self::SUSPENDED,
-		self::STOPPED,
-		self::STARTING,
-		self::STOPPING,
-		self::REBOOTING,
-		self::REBUILDING,
-		self::PROVISION_FAILED,
-		self::CANCEL_REQUESTED,
-		self::CANCELLING,
-		self::CANCELLED,
-		self::TERMINATION_QUEUED,
-		self::TERMINATED,
-		self::ERROR,
-	);
+    /**
+     * Transitional states — those that trigger active polling.
+     *
+     * @var string[]
+     */
+    public const TRANSITIONAL = array(
+        self::PROVISIONING_QUEUED,
+        self::PROVISIONING_PENDING,
+        self::PROVISIONING,
+        self::STARTING,
+        self::STOPPING,
+        self::REBOOTING,
+        self::REBUILDING,
+        self::CANCEL_REQUESTED,
+        self::CANCELLING,
+        self::TERMINATION_QUEUED,
+    );
 
-	/**
-	 * Transitional states — those that trigger active polling.
-	 *
-	 * @var string[]
-	 */
-	public const TRANSITIONAL = array(
-		self::PROVISIONING_QUEUED,
-		self::PROVISIONING_PENDING,
-		self::PROVISIONING,
-		self::STARTING,
-		self::STOPPING,
-		self::REBOOTING,
-		self::REBUILDING,
-		self::CANCEL_REQUESTED,
-		self::CANCELLING,
-		self::TERMINATION_QUEUED,
-	);
-
-	/** Prevent instantiation — this class is a namespace for constants only. */
-	private function __construct() {}
+    /** Prevent instantiation — this class is a namespace for constants only. */
+    private function __construct()
+    {
+    }
 }
