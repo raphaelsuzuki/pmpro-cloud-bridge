@@ -1,4 +1,5 @@
 <?php
+
 /**
  * ProviderRegistry — manages registered cloud provider drivers.
  *
@@ -17,106 +18,123 @@ namespace CloudBridge\Provider;
 /**
  * Singleton registry for all active CloudProviderInterface implementations.
  */
-final class ProviderRegistry {
+final class ProviderRegistry
+{
+    /**
+     * Registered drivers, keyed by driver ID.
+     *
+     * @var array<string, CloudProviderInterface>
+     */
+    private array $drivers = array();
 
-	/**
-	 * Registered drivers, keyed by driver ID.
-	 *
-	 * @var array<string, CloudProviderInterface>
-	 */
-	private array $drivers = [];
+    /**
+     * Singleton instance.
+     *
+     * @var self|null
+     */
+    private static ?self $instance = null;
 
-	/** @var self|null */
-	private static ?self $instance = null;
+    /**
+     * Private constructor — use get_instance().
+     */
+    private function __construct()
+    {
+    }
 
-	private function __construct() {}
+    /**
+     * Returns the singleton registry instance.
+     */
+    public static function get_instance(): self
+    {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
 
-	public static function get_instance(): self {
-		if ( null === self::$instance ) {
-			self::$instance = new self();
-		}
+        return self::$instance;
+    }
 
-		return self::$instance;
-	}
+    /**
+     * Fires the cloud_bridge_providers filter and validates the result.
+     *
+     * Should be called once on the init hook, after all plugins have loaded.
+     *
+     * @return void
+     */
+    public function load(): void
+    {
+        /**
+         * Filters the list of registered cloud provider drivers.
+         *
+         * Third-party plugins add drivers here:
+         *   add_filter( 'cloud_bridge_providers', function( array $providers ): array {
+         *       $providers['myprovider'] = new MyDriver( $config );
+         *       return $providers;
+         *   } );
+         *
+         * @param array<string, CloudProviderInterface> $providers
+         */
+        $raw = apply_filters('cloud_bridge_providers', array());
 
-	/**
-	 * Fires the cloud_bridge_providers filter and validates the result.
-	 *
-	 * Should be called once on the init hook, after all plugins have loaded.
-	 *
-	 * @return void
-	 */
-	public function load(): void {
-		/**
-		 * Filters the list of registered cloud provider drivers.
-		 *
-		 * Third-party plugins add drivers here:
-		 *   add_filter( 'cloud_bridge_providers', function( array $providers ): array {
-		 *       $providers['myprovider'] = new MyDriver( $config );
-		 *       return $providers;
-		 *   } );
-		 *
-		 * @param array<string, CloudProviderInterface> $providers
-		 */
-		$raw = apply_filters( 'cloud_bridge_providers', [] );
+        $this->drivers = array();
 
-		$this->drivers = [];
+        if (! is_array($raw)) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log(
+                sprintf(
+                    '[CloudBridge] Ignoring cloud_bridge_providers filter result: expected array, got %s.',
+                    gettype($raw)
+                )
+            );
+            return;
+        }
 
-		if ( ! is_array( $raw ) ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log(
-				sprintf(
-					'[CloudBridge] Ignoring cloud_bridge_providers filter result: expected array, got %s.',
-					gettype( $raw )
-				)
-			);
-			return;
-		}
+        foreach ($raw as $id => $driver) {
+            if (! $driver instanceof CloudProviderInterface) {
+                // Log and skip non-conforming drivers rather than crashing.
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log(sprintf('[CloudBridge] Skipping driver "%s": does not implement CloudProviderInterface.', $id));
+                continue;
+            }
 
-		foreach ( $raw as $id => $driver ) {
-			if ( ! $driver instanceof CloudProviderInterface ) {
-				// Log and skip non-conforming drivers rather than crashing.
-				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				error_log( sprintf( '[CloudBridge] Skipping driver "%s": does not implement CloudProviderInterface.', $id ) );
-				continue;
-			}
+            $this->drivers[ (string) $id ] = $driver;
+        }
+    }
 
-			$this->drivers[ (string) $id ] = $driver;
-		}
-	}
+    /**
+     * Returns a driver by its ID.
+     *
+     * @param string $id Driver slug, e.g. 'vultr'.
+     * @return CloudProviderInterface
+     * @throws \InvalidArgumentException If driver is not registered.
+     */
+    public function get(string $id): CloudProviderInterface
+    {
+        if (! isset($this->drivers[ $id ])) {
+            throw new \InvalidArgumentException(
+                sprintf('Cloud provider driver "%s" is not registered.', esc_html($id))
+            );
+        }
 
-	/**
-	 * Returns a driver by its ID.
-	 *
-	 * @param string $id Driver slug, e.g. 'vultr'.
-	 * @return CloudProviderInterface
-	 * @throws \InvalidArgumentException If driver is not registered.
-	 */
-	public function get( string $id ): CloudProviderInterface {
-		if ( ! isset( $this->drivers[ $id ] ) ) {
-			throw new \InvalidArgumentException(
-				sprintf( 'Cloud provider driver "%s" is not registered.', esc_html( $id ) )
-			);
-		}
+        return $this->drivers[ $id ];
+    }
 
-		return $this->drivers[ $id ];
-	}
+    /**
+     * Returns all registered drivers.
+     *
+     * @return array<string, CloudProviderInterface>
+     */
+    public function all(): array
+    {
+        return $this->drivers;
+    }
 
-	/**
-	 * Returns all registered drivers.
-	 *
-	 * @return array<string, CloudProviderInterface>
-	 */
-	public function all(): array {
-		return $this->drivers;
-	}
-
-	/**
-	 * Returns whether a driver with the given ID is registered.
-	 *
-	 * @param string $id Driver slug.
-	 */
-	public function has( string $id ): bool {
-		return isset( $this->drivers[ $id ] );
-	}
+    /**
+     * Returns whether a driver with the given ID is registered.
+     *
+     * @param string $id Driver slug.
+     */
+    public function has(string $id): bool
+    {
+        return isset($this->drivers[ $id ]);
+    }
 }
