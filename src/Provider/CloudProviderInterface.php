@@ -13,7 +13,10 @@ declare(strict_types=1);
 
 namespace CloudBridge\Provider;
 
+use CloudBridge\Provider\DTO\ActionResult;
+use CloudBridge\Provider\DTO\InstanceStatus as InstanceStatusDTO;
 use CloudBridge\Provider\DTO\ProvisionRequest;
+use CloudBridge\Provider\DTO\ProvisionResult;
 use CloudBridge\Provider\Result\ProviderResult;
 
 /**
@@ -45,8 +48,9 @@ interface CloudProviderInterface {
 	/**
 	 * Tests that stored credentials are valid.
 	 *
-	 * Called on settings save and from the daily health-check job. Returns
-	 * ProviderResult<bool>.
+	 * Called on settings save and from the daily health-check job.
+	 *
+	 * @return ProviderResult<bool>
 	 */
 	public function validate_credentials(): ProviderResult;
 
@@ -79,19 +83,21 @@ interface CloudProviderInterface {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Provisions a new server instance. Returns ProviderResult<ProvisionResult>.
+	 * Provisions a new server instance.
 	 *
 	 * @param ProvisionRequest $request Provisioning parameters.
+	 * @return ProviderResult<ProvisionResult>
 	 */
 	public function provision( ProvisionRequest $request ): ProviderResult;
 
 	/**
-	 * Destroys a server instance. Returns ProviderResult<ActionResult>.
+	 * Destroys a server instance.
 	 *
 	 * MUST only be called when instance status is TERMINATION_QUEUED.
 	 * The job layer enforces this with a \LogicException.
 	 *
 	 * @param string $provider_instance_id Provider-side instance ID.
+	 * @return ProviderResult<ActionResult>
 	 */
 	public function destroy( string $provider_instance_id ): ProviderResult;
 
@@ -99,13 +105,28 @@ interface CloudProviderInterface {
 	// Power operations
 	// -------------------------------------------------------------------------
 
-	/** @param string $provider_instance_id Provider-side instance ID. */
+	/**
+	 * Powers on a stopped instance.
+	 *
+	 * @param string $provider_instance_id Provider-side instance ID.
+	 * @return ProviderResult<ActionResult>
+	 */
 	public function power_on( string $provider_instance_id ): ProviderResult;
 
-	/** @param string $provider_instance_id Provider-side instance ID. */
+	/**
+	 * Powers off a running instance.
+	 *
+	 * @param string $provider_instance_id Provider-side instance ID.
+	 * @return ProviderResult<ActionResult>
+	 */
 	public function power_off( string $provider_instance_id ): ProviderResult;
 
-	/** @param string $provider_instance_id Provider-side instance ID. */
+	/**
+	 * Reboots a running instance.
+	 *
+	 * @param string $provider_instance_id Provider-side instance ID.
+	 * @return ProviderResult<ActionResult>
+	 */
 	public function reboot( string $provider_instance_id ): ProviderResult;
 
 	// -------------------------------------------------------------------------
@@ -117,6 +138,7 @@ interface CloudProviderInterface {
 	 *
 	 * @param string $provider_instance_id Provider-side instance ID.
 	 * @param string $image_id             OS image ID to install.
+	 * @return ProviderResult<ActionResult>
 	 */
 	public function rebuild( string $provider_instance_id, string $image_id ): ProviderResult;
 
@@ -125,9 +147,10 @@ interface CloudProviderInterface {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Returns the current provider-side status. Returns ProviderResult<InstanceStatus>.
+	 * Returns the current provider-side status.
 	 *
 	 * @param string $provider_instance_id Provider-side instance ID.
+	 * @return ProviderResult<InstanceStatusDTO>
 	 */
 	public function get_instance_status( string $provider_instance_id ): ProviderResult;
 
@@ -139,13 +162,22 @@ interface CloudProviderInterface {
 	 * Lists available plan/size slugs, optionally filtered by region.
 	 *
 	 * @param string|null $region_slug Optional region to filter by.
+	 * @return ProviderResult<array<int, array<string, mixed>>>
 	 */
 	public function get_available_plans( ?string $region_slug = null ): ProviderResult;
 
-	/** Lists available regions for this provider. */
+	/**
+	 * Lists available regions for this provider.
+	 *
+	 * @return ProviderResult<array<int, array<string, mixed>>>
+	 */
 	public function get_available_regions(): ProviderResult;
 
-	/** Lists available OS images for this provider. */
+	/**
+	 * Lists available OS images for this provider.
+	 *
+	 * @return ProviderResult<array<int, array<string, mixed>>>
+	 */
 	public function get_available_images(): ProviderResult;
 
 	// -------------------------------------------------------------------------

@@ -24,13 +24,23 @@ final class ProviderRegistry {
 	 *
 	 * @var array<string, CloudProviderInterface>
 	 */
-	private array $drivers = [];
+	private array $drivers = array();
 
-	/** @var self|null */
+	/**
+	 * Singleton instance.
+	 *
+	 * @var self|null
+	 */
 	private static ?self $instance = null;
 
+	/**
+	 * Private constructor — use get_instance().
+	 */
 	private function __construct() {}
 
+	/**
+	 * Returns the singleton registry instance.
+	 */
 	public static function get_instance(): self {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
@@ -58,9 +68,9 @@ final class ProviderRegistry {
 		 *
 		 * @param array<string, CloudProviderInterface> $providers
 		 */
-		$raw = apply_filters( 'cloud_bridge_providers', [] );
+		$raw = apply_filters( 'cloud_bridge_providers', array() );
 
-		$this->drivers = [];
+		$this->drivers = array();
 
 		if ( ! is_array( $raw ) ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
