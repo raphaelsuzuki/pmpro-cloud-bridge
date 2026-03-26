@@ -1,4 +1,5 @@
 <?php
+
 /**
  * ActionResult DTO.
  *
@@ -15,14 +16,17 @@ namespace CloudBridge\Provider\DTO;
 /**
  * The data a driver returns after successfully initiating a lifecycle action.
  */
-final class ActionResult {
-
-	/**
-	 * @param string      $provider_action_id Provider-side action/task ID for polling.
-	 * @param string|null $provider_status     Raw provider status string after action, if known.
-	 */
-	public function __construct(
-		public readonly string  $provider_action_id,
-		public readonly ?string $provider_status = null,
-	) {}
+final class ActionResult
+{
+    /**
+     * Constructor.
+     *
+     * @param string      $provider_action_id Provider-side action/task ID for polling.
+     * @param string|null $provider_status     Raw provider status string after action, if known.
+     */
+    public function __construct(
+        public readonly string $provider_action_id,
+        public readonly ?string $provider_status = null,
+    ) {
+    }
 }
