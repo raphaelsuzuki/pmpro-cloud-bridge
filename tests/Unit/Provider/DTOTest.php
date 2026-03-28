@@ -200,6 +200,17 @@ class DTOTest extends TestCase
     }
 
     /**
+     * Test ProviderResult::fail() rejects unknown error codes.
+     */
+    public function test_provider_result_fail_rejects_invalid_error_code(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid provider error code');
+
+        ProviderResult::fail('unknown_code', 'Unexpected error');
+    }
+
+    /**
      * Test ProviderResult error code constants.
      */
     public function test_provider_result_error_codes_constant(): void

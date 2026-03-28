@@ -125,4 +125,10 @@ class StateMachineTest extends TestCase {
 
 		InstanceStateMachine::can_transition( InstanceStatus::ACTIVE, 'INVALID' );
 	}
+
+	public function test_can_transition_allows_same_status(): void {
+		$this->assertTrue(
+			InstanceStateMachine::can_transition( InstanceStatus::ACTIVE, InstanceStatus::ACTIVE )
+		);
+	}
 }

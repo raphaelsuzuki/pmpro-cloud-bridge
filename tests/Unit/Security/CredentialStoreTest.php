@@ -142,5 +142,14 @@ class CredentialStoreTest extends TestCase {
 		$this->assertTrue( $store->delete_provider_credential( 'linode' ) );
 		$this->assertNull( $store->get_provider_credential( 'linode' ) );
 	}
+
+	public function test_store_throws_when_fallback_key_material_is_weak(): void {
+		$store = new CredentialStore();
+
+		$this->expectException( \RuntimeException::class );
+		$this->expectExceptionMessage( 'fallback key material is too weak' );
+
+		$store->store_provider_credential( 'vultr', 'secret' );
+	}
 }
 }

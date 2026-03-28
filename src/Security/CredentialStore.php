@@ -20,6 +20,7 @@ namespace CloudBridge\Security;
  */
 final class CredentialStore {
 	private const OPTION_PREFIX = 'cb_credential_';
+	private const MIN_FALLBACK_KEY_MATERIAL_LENGTH = 64;
 
 	/**
 	 * Ensures fallback warning hook is only registered once.
@@ -143,6 +144,8 @@ final class CredentialStore {
 	 * Returns a binary secretbox key of exactly 32 bytes.
 	 *
 	 * @return string
+	 *
+	 * @throws \RuntimeException When fallback key material is too weak.
 	 */
 	private function resolve_encryption_key(): string {
 		$key_material  = $this->key_override;
@@ -156,7 +159,12 @@ final class CredentialStore {
 				$secure_auth_key = \defined( 'SECURE_AUTH_KEY' ) && \is_string( SECURE_AUTH_KEY ) ? SECURE_AUTH_KEY : '';
 				$site_url        = \function_exists( 'site_url' ) ? (string) \site_url() : '';
 				$key_material    = $auth_key . $secure_auth_key . $site_url;
-				$used_fallback   = true;
+
+				if ( \strlen( $key_material ) < self::MIN_FALLBACK_KEY_MATERIAL_LENGTH ) {
+					throw new \RuntimeException( 'Credential encryption fallback key material is too weak. Define CB_ENCRYPTION_KEY in wp-config.php.' );
+				}
+
+				$used_fallback = true;
 			}
 		}
 
