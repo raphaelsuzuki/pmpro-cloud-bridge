@@ -15,7 +15,6 @@ declare(strict_types=1);
 namespace CloudBridge\Provider;
 
 use CloudBridge\Provider\DTO\ActionResult;
-use CloudBridge\Provider\DTO\InstanceStatus as InstanceStatusDTO;
 use CloudBridge\Provider\DTO\ProvisionRequest;
 use CloudBridge\Provider\DTO\ProvisionResult;
 use CloudBridge\Provider\Result\ProviderResult;
@@ -151,7 +150,7 @@ interface CloudProviderInterface
      * Returns the current provider-side status.
      *
      * @param string $provider_instance_id Provider-side instance ID.
-     * @return ProviderResult<InstanceStatusDTO>
+     * @return ProviderResult<string>
      */
     public function get_instance_status(string $provider_instance_id): ProviderResult;
 
