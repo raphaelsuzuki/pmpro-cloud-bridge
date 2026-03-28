@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace CloudBridge\Provider;
 
+use CloudBridge\Provider\Drivers\DummyDriver;
+
 /**
  * Singleton registry for all active CloudProviderInterface implementations.
  */
@@ -84,6 +86,10 @@ final class ProviderRegistry {
 		}
 
 		foreach ( $raw as $id => $driver ) {
+			if ( $driver instanceof DummyDriver && ! self::dummy_driver_is_enabled() ) {
+				continue;
+			}
+
 			if ( ! $driver instanceof CloudProviderInterface ) {
 				// Log and skip non-conforming drivers rather than crashing.
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -93,6 +99,13 @@ final class ProviderRegistry {
 
 			$this->drivers[ (string) $id ] = $driver;
 		}
+	}
+
+	/**
+	 * Returns true when DummyDriver is explicitly enabled for tests/dev.
+	 */
+	private static function dummy_driver_is_enabled(): bool {
+		return defined( 'CB_ENABLE_DUMMY_DRIVER' ) && true === constant( 'CB_ENABLE_DUMMY_DRIVER' );
 	}
 
 	/**
