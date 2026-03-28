@@ -73,9 +73,21 @@ final class ProviderResult
      * @param string $error_code    Must be one of self::ERROR_CODES.
      * @param string $error_message Human-readable description of the failure.
      * @return self<null>
+     *
+     * @throws \InvalidArgumentException When $error_code is not in self::ERROR_CODES.
      */
     public static function fail(string $error_code, string $error_message): self
     {
+        if (! in_array($error_code, self::ERROR_CODES, true)) {
+            throw new \InvalidArgumentException(
+                sprintf(
+                    'Invalid provider error code "%s". Allowed codes: %s.',
+                    $error_code,
+                    implode(', ', self::ERROR_CODES)
+                )
+            );
+        }
+
         return new self(false, null, $error_code, $error_message);
     }
 
