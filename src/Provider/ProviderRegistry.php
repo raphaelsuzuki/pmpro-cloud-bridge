@@ -38,7 +38,8 @@ final class ProviderRegistry {
 	/**
 	 * Private constructor — use get_instance().
 	 */
-	private function __construct() {}
+	private function __construct() {
+	}
 
 	/**
 	 * Returns the singleton registry instance.
@@ -55,8 +56,6 @@ final class ProviderRegistry {
 	 * Fires the cloud_bridge_providers filter and validates the result.
 	 *
 	 * Should be called once on the init hook, after all plugins have loaded.
-	 *
-	 * @return void
 	 */
 	public function load(): void {
 		/**
@@ -75,13 +74,14 @@ final class ProviderRegistry {
 		$this->drivers = array();
 
 		if ( ! is_array( $raw ) ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			error_log(
 				sprintf(
 					'[CloudBridge] Ignoring cloud_bridge_providers filter result: expected array, got %s.',
 					gettype( $raw )
 				)
 			);
+
 			return;
 		}
 
@@ -92,7 +92,7 @@ final class ProviderRegistry {
 
 			if ( ! $driver instanceof CloudProviderInterface ) {
 				// Log and skip non-conforming drivers rather than crashing.
-				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				error_log( sprintf( '[CloudBridge] Skipping driver "%s": does not implement CloudProviderInterface.', $id ) );
 				continue;
 			}

@@ -14,7 +14,6 @@ declare(strict_types=1);
 namespace CloudBridge\Provider;
 
 use CloudBridge\Provider\DTO\ActionResult;
-use CloudBridge\Provider\DTO\InstanceStatus as InstanceStatusDTO;
 use CloudBridge\Provider\DTO\ProvisionRequest;
 use CloudBridge\Provider\DTO\ProvisionResult;
 use CloudBridge\Provider\Result\ProviderResult;
