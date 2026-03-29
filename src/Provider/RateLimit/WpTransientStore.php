@@ -50,6 +50,14 @@ final class WpTransientStore implements TransientStoreInterface
      */
     public function set(string $key, mixed $value, int $ttl_seconds): bool
     {
+        if (
+            \function_exists('wp_using_ext_object_cache')
+            && \wp_using_ext_object_cache()
+            && \function_exists('wp_cache_set')
+        ) {
+            return (bool) \wp_cache_set($key, $value, 'cloud_bridge_rate_limit', $ttl_seconds);
+        }
+
         if (! \function_exists('set_transient')) {
             return false;
         }
@@ -155,7 +163,7 @@ final class WpTransientStore implements TransientStoreInterface
             $wpdb->prepare(
                 "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
 				VALUES (%s, %s, 'off')
-				ON DUPLICATE KEY UPDATE option_value = LAST_INSERT_ID(CAST(option_value AS SIGNED) + VALUES(option_value))",
+				ON DUPLICATE KEY UPDATE option_value = LAST_INSERT_ID(COALESCE(CAST(option_value AS SIGNED), 0) + VALUES(option_value))",
                 $option_name,
                 (string) $amount
             )

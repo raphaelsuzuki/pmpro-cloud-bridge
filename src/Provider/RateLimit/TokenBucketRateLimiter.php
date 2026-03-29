@@ -88,7 +88,7 @@ final class TokenBucketRateLimiter
                 $tokens  = \min((float) $capacity, $tokens + ($elapsed * $refill_per_second));
 
                 if ($tokens >= 1.0) {
-                    $store->set(
+                    $success = $store->set(
                         $state_key,
                         array(
                             'tokens'     => $tokens - 1.0,
@@ -96,6 +96,10 @@ final class TokenBucketRateLimiter
                         ),
                         $ttl_seconds
                     );
+                    if (false === $success) {
+                        // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+                        throw new \RuntimeException(\sprintf('Failed to persist token bucket state for key "%s".', $state_key));
+                    }
                     return;
                 }
 

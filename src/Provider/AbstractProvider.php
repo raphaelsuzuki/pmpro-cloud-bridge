@@ -93,11 +93,15 @@ abstract class AbstractProvider implements CloudProviderInterface
     protected function http_request(string $method, string $url, array $headers = array(), mixed $body = null)
     {
         $rate_limits = $this->get_rate_limits();
-        $this->get_rate_limiter()->acquire(
-            $this->get_id(),
-            (int) $rate_limits['max_requests_per_minute'],
-            (int) $rate_limits['burst']
-        );
+        try {
+            $this->get_rate_limiter()->acquire(
+                $this->get_id(),
+                (int) $rate_limits['max_requests_per_minute'],
+                (int) $rate_limits['burst']
+            );
+        } catch (\RuntimeException $exception) {
+            return ProviderResult::fail('rate_limit_error', $exception->getMessage());
+        }
 
         $payload = null;
         if (null !== $body) {

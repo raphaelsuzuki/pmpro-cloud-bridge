@@ -70,7 +70,8 @@ class TokenBucketRateLimiterTest extends TestCase
 
         $limiter->acquire('vultr', 60, 2);
         $this->assertGreaterThanOrEqual(1, $sleep_calls);
-        $this->assertGreaterThanOrEqual(1001.0, $time);
+        $epsilon = 1e-3;
+        $this->assertGreaterThanOrEqual(1001.0 - $epsilon, $time);
     }
 
     public function test_acquire_is_keyed_per_provider(): void
