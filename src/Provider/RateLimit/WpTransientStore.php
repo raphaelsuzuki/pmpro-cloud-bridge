@@ -64,6 +64,8 @@ final class WpTransientStore implements TransientStoreInterface {
 	 * @param int    $ttl_seconds Expiry in seconds.
 	 *
 	 * @return int
+	 *
+	 * @throws \RuntimeException When atomic increment cannot be completed.
 	 */
 	public function increment( string $key, int $amount, int $ttl_seconds ): int {
 		$ttl_seconds = \max( 1, $ttl_seconds );
@@ -79,18 +81,42 @@ final class WpTransientStore implements TransientStoreInterface {
 			\wp_cache_add( $key, 0, $group, $ttl_seconds );
 			$new_value = \wp_cache_incr( $key, $amount, $group );
 
-			if ( false !== $new_value ) {
-				\wp_cache_set( $key, (int) $new_value, $group, $ttl_seconds );
-				return (int) $new_value;
+			if ( false === $new_value ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				\error_log( \sprintf( '[CloudBridge] wp_cache_incr failed for rate-limit key "%s" in group "%s".', $key, $group ) );
+
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+				throw new \RuntimeException( \sprintf( 'Rate-limit cache increment failed for key "%s".', $key ) );
 			}
+
+			\wp_cache_set( $key, (int) $new_value, $group, $ttl_seconds );
+			return (int) $new_value;
 		}
 
 		global $wpdb;
 		if ( ! isset( $wpdb ) || ! ( $wpdb instanceof \wpdb ) ) {
-			$current = (int) $this->get( $key, 0 );
-			$next    = $current + $amount;
-			$this->set( $key, $next, $ttl_seconds );
-			return $next;
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			\error_log( \sprintf( '[CloudBridge] Rate-limit increment fallback in use for key "%s" because $wpdb is unavailable.', $key ) );
+
+			$lock_handle = $this->acquire_fallback_lock( $key );
+			if ( false === $lock_handle ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+				throw new \RuntimeException( \sprintf( 'Unable to acquire fallback lock for rate-limit key "%s".', $key ) );
+			}
+
+			try {
+				$current = (int) $this->get( $key, 0 );
+				$next    = $current + $amount;
+
+				if ( ! $this->set( $key, $next, $ttl_seconds ) ) {
+					// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+					throw new \RuntimeException( \sprintf( 'Failed to persist fallback increment for rate-limit key "%s".', $key ) );
+				}
+
+				return $next;
+			} finally {
+				$this->release_fallback_lock( $lock_handle );
+			}
 		}
 
 		$option_name = '_transient_' . $key;
@@ -106,27 +132,36 @@ final class WpTransientStore implements TransientStoreInterface {
 		);
 
 		if ( null !== $timeout_val && (int) $timeout_val < $now ) {
-			$wpdb->query(
+			$deleted = $wpdb->query(
 				$wpdb->prepare(
 					"DELETE FROM {$wpdb->options} WHERE option_name IN (%s, %s)",
 					$option_name,
 					$timeout_key
 				)
 			);
+
+			if ( false === $deleted ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+				throw new \RuntimeException( \sprintf( 'Failed deleting expired rate-limit transient keys for "%s".', $key ) );
+			}
 		}
 
-		$wpdb->query(
+		$incremented = $wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
 				VALUES (%s, %s, 'off')
-				ON DUPLICATE KEY UPDATE option_value = CAST(option_value AS SIGNED) + %d",
+				ON DUPLICATE KEY UPDATE option_value = LAST_INSERT_ID(CAST(option_value AS SIGNED) + VALUES(option_value))",
 				$option_name,
-				(string) $amount,
-				$amount
+				(string) $amount
 			)
 		);
 
-		$wpdb->query(
+		if ( false === $incremented ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new \RuntimeException( \sprintf( 'Failed incrementing rate-limit value for key "%s".', $key ) );
+		}
+
+		$timeout_updated = $wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
 				VALUES (%s, %s, 'off')
@@ -136,13 +171,49 @@ final class WpTransientStore implements TransientStoreInterface {
 			)
 		);
 
-		$new_value = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
-				$option_name
-			)
-		);
+		if ( false === $timeout_updated ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new \RuntimeException( \sprintf( 'Failed updating rate-limit timeout for key "%s".', $key ) );
+		}
+
+		$new_value = (int) $wpdb->get_var( 'SELECT LAST_INSERT_ID()' );
 
 		return $new_value;
+	}
+
+	/**
+	 * Acquires a local fallback file lock for non-database increment path.
+	 *
+	 * @param string $key Rate-limit key.
+	 *
+	 * @return resource|false
+	 */
+	private function acquire_fallback_lock( string $key ) {
+		$lock_file = \rtrim( \sys_get_temp_dir(), DIRECTORY_SEPARATOR ) . DIRECTORY_SEPARATOR . 'cloud-bridge-rate-limit-' . \md5( $key ) . '.lock';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		$handle = \fopen( $lock_file, 'c+' );
+
+		if ( false === $handle ) {
+			return false;
+		}
+
+		if ( ! \flock( $handle, LOCK_EX ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			\fclose( $handle );
+			return false;
+		}
+
+		return $handle;
+	}
+
+	/**
+	 * Releases a previously acquired fallback file lock.
+	 *
+	 * @param resource $handle Lock file handle.
+	 */
+	private function release_fallback_lock( $handle ): void {
+		\flock( $handle, LOCK_UN );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		\fclose( $handle );
 	}
 }
