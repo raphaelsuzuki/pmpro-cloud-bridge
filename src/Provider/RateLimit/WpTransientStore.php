@@ -203,10 +203,10 @@ final class WpTransientStore implements TransientStoreInterface
      */
     private function acquire_fallback_lock(string $key)
     {
-    $lock_suffix = \hash('sha256', $key);
-    $lock_file   = \rtrim(\sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'cloud-bridge-rate-limit-' . $lock_suffix . '.lock';
-    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
-    $handle = \fopen($lock_file, 'c+');
+        $lock_suffix = \hash('sha256', $key);
+        $lock_file   = \rtrim(\sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'cloud-bridge-rate-limit-' . $lock_suffix . '.lock';
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+        $handle = \fopen($lock_file, 'c+');
 
         if (false === $handle) {
             return false;
