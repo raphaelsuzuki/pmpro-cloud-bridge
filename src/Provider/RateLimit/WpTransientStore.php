@@ -75,7 +75,6 @@ final class WpTransientStore implements TransientStoreInterface {
 			&& \wp_using_ext_object_cache()
 			&& \function_exists( 'wp_cache_add' )
 			&& \function_exists( 'wp_cache_incr' )
-			&& \function_exists( 'wp_cache_set' )
 		) {
 			$group = 'cloud_bridge_rate_limit';
 			\wp_cache_add( $key, 0, $group, $ttl_seconds );
@@ -89,7 +88,8 @@ final class WpTransientStore implements TransientStoreInterface {
 				throw new \RuntimeException( \sprintf( 'Rate-limit cache increment failed for key "%s".', $key ) );
 			}
 
-			\wp_cache_set( $key, (int) $new_value, $group, $ttl_seconds );
+			// Keep increment atomic: do not issue a subsequent write that can
+			// clobber concurrent increments. TTL refresh is backend-specific.
 			return (int) $new_value;
 		}
 
