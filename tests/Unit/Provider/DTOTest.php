@@ -252,6 +252,10 @@ class DTOTest extends TestCase
         $this->assertIsString($request->idempotency_key);
         $this->assertIsString($request->plan_slug);
         $this->assertIsString($request->region_slug);
+        $this->assertIsString($request->image_id);
+        $this->assertIsString($request->hostname);
         $this->assertIsInt($request->user_id);
+        $this->assertIsInt($request->instance_id);
+        $this->assertIsArray($request->ssh_key_ids);
     }
 }

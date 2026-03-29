@@ -13,7 +13,9 @@ namespace CloudBridge\Provider\RateLimit;
  * Shared token-bucket limiter used before provider API calls.
  */
 final class TokenBucketRateLimiter {
-	private const STATE_PREFIX = 'cb_rate_limit_';
+	private const STATE_PREFIX     = 'cb_rate_limit_';
+	private const LOCK_PREFIX      = 'cb_rate_limit_lock_';
+	private const LOCK_TTL_SECONDS = 5;
 
 	/**
 	 * Sleep callback used when bucket is empty.
@@ -58,40 +60,72 @@ final class TokenBucketRateLimiter {
 		$capacity          = \max( 1, $burst );
 		$refill_per_second = \max( 1, $max_requests_per_minute ) / 60;
 		$state_key         = self::STATE_PREFIX . $provider_id;
+		$lock_key          = self::LOCK_PREFIX . $provider_id;
 		$ttl_seconds       = \max( 60, (int) \ceil( $capacity / $refill_per_second ) * 2 );
+		$store             = $this->get_store();
 
 		while ( true ) {
+			if ( ! $this->try_acquire_lock( $store, $lock_key ) ) {
+				$this->sleep( 10000 );
+				continue;
+			}
+
 			$now   = $this->now();
-			$state = $this->get_store()->get( $state_key, null );
+			$state = $store->get( $state_key, null );
 
-			$tokens     = (float) $capacity;
-			$updated_at = $now;
-			if ( \is_array( $state ) && isset( $state['tokens'], $state['updated_at'] ) ) {
-				$tokens     = (float) $state['tokens'];
-				$updated_at = (float) $state['updated_at'];
+			try {
+				$tokens     = (float) $capacity;
+				$updated_at = $now;
+				if ( \is_array( $state ) && isset( $state['tokens'], $state['updated_at'] ) ) {
+					$tokens     = (float) $state['tokens'];
+					$updated_at = (float) $state['updated_at'];
+				}
+
+				$elapsed = \max( 0.0, $now - $updated_at );
+				$tokens  = \min( (float) $capacity, $tokens + ( $elapsed * $refill_per_second ) );
+
+				if ( $tokens >= 1.0 ) {
+					$store->set(
+						$state_key,
+						array(
+							'tokens'     => $tokens - 1.0,
+							'updated_at' => $now,
+						),
+						$ttl_seconds
+					);
+					return;
+				}
+
+				$seconds_until_next_token = ( 1.0 - $tokens ) / $refill_per_second;
+				$microseconds             = (int) \ceil( $seconds_until_next_token * 1000000 );
+				$microseconds             = \max( 10000, $microseconds );
+			} finally {
+				$this->release_lock( $store, $lock_key );
 			}
-
-			$elapsed = \max( 0.0, $now - $updated_at );
-			$tokens  = \min( (float) $capacity, $tokens + ( $elapsed * $refill_per_second ) );
-
-			if ( $tokens >= 1.0 ) {
-				$this->get_store()->set(
-					$state_key,
-					array(
-						'tokens'     => $tokens - 1.0,
-						'updated_at' => $now,
-					),
-					$ttl_seconds
-				);
-				return;
-			}
-
-			$seconds_until_next_token = ( 1.0 - $tokens ) / $refill_per_second;
-			$microseconds             = (int) \ceil( $seconds_until_next_token * 1000000 );
-			$microseconds             = \max( 10000, $microseconds );
 
 			$this->sleep( $microseconds );
 		}
+	}
+
+	/**
+	 * Attempts to acquire a short-lived lock for state mutation.
+	 *
+	 * @param TransientStoreInterface $store    State store.
+	 * @param string                  $lock_key Lock key.
+	 */
+	private function try_acquire_lock( TransientStoreInterface $store, string $lock_key ): bool {
+		$lock_count = $store->increment( $lock_key, 1, self::LOCK_TTL_SECONDS );
+		return 1 === $lock_count;
+	}
+
+	/**
+	 * Releases a previously acquired short-lived lock.
+	 *
+	 * @param TransientStoreInterface $store    State store.
+	 * @param string                  $lock_key Lock key.
+	 */
+	private function release_lock( TransientStoreInterface $store, string $lock_key ): void {
+		$store->set( $lock_key, 0, 1 );
 	}
 
 	/**

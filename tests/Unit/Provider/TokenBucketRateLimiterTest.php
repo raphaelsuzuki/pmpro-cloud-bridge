@@ -31,6 +31,13 @@ final class InMemoryTransientStore implements TransientStoreInterface {
 		$this->data[ $key ] = $value;
 		return true;
 	}
+
+	public function increment( string $key, int $amount, int $ttl_seconds ): int {
+		unset( $ttl_seconds );
+		$current           = (int) ( $this->data[ $key ] ?? 0 );
+		$this->data[ $key ] = $current + $amount;
+		return (int) $this->data[ $key ];
+	}
 }
 
 class TokenBucketRateLimiterTest extends TestCase {

@@ -16,9 +16,9 @@ final class HttpResponse {
 	/**
 	 * Constructor.
 	 *
-	 * @param int                  $status_code HTTP response status code.
-	 * @param string               $body        Raw response body.
-	 * @param array<string,string> $headers     Response headers.
+	 * @param int                                      $status_code HTTP response status code.
+	 * @param string                                   $body        Raw response body.
+	 * @param array<string, string|array<int, string>> $headers Response headers.
 	 */
 	public function __construct(
 		public readonly int $status_code,

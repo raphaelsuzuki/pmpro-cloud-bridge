@@ -51,13 +51,31 @@ final class WpHttpClient implements HttpClientInterface {
 		$raw_headers = \wp_remote_retrieve_headers( $response );
 		$body_text   = (string) \wp_remote_retrieve_body( $response );
 
-		$headers_out = array();
-		if ( \is_array( $raw_headers ) ) {
-			foreach ( $raw_headers as $key => $value ) {
-				if ( ! \is_string( $value ) ) {
+		$headers_out  = array();
+		$header_items = null;
+		if ( \is_object( $raw_headers ) && \method_exists( $raw_headers, 'getAll' ) ) {
+			$all_headers = $raw_headers->getAll();
+			if ( \is_iterable( $all_headers ) ) {
+				$header_items = $all_headers;
+			}
+		} elseif ( \is_iterable( $raw_headers ) ) {
+			$header_items = $raw_headers;
+		}
+
+		if ( \is_iterable( $header_items ) ) {
+			foreach ( $header_items as $key => $value ) {
+				$header_name = (string) $key;
+
+				if ( \is_array( $value ) ) {
+					$normalised_values = array();
+					foreach ( $value as $item ) {
+						$normalised_values[] = (string) $item;
+					}
+					$headers_out[ $header_name ] = $normalised_values;
 					continue;
 				}
-				$headers_out[ (string) $key ] = $value;
+
+				$headers_out[ $header_name ] = (string) $value;
 			}
 		}
 

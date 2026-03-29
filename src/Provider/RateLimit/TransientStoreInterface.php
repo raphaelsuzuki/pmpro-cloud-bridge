@@ -29,6 +29,23 @@ interface TransientStoreInterface {
 	 * @param string $key         Storage key.
 	 * @param mixed  $value       Value to persist.
 	 * @param int    $ttl_seconds Expiry in seconds.
+	 *
+	 * @return bool True when write succeeds, false otherwise.
 	 */
 	public function set( string $key, mixed $value, int $ttl_seconds ): bool;
+
+	/**
+	 * Atomically increments a numeric value.
+	 *
+	 * Implementations should use native atomic primitives when available
+	 * (e.g. Redis/Memcached increment operations) and set TTL when creating
+	 * the key.
+	 *
+	 * @param string $key         Storage key.
+	 * @param int    $amount      Increment amount.
+	 * @param int    $ttl_seconds Expiry in seconds.
+	 *
+	 * @return int New value after increment.
+	 */
+	public function increment( string $key, int $amount, int $ttl_seconds ): int;
 }
