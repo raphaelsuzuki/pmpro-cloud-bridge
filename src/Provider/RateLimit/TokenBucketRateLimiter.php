@@ -18,6 +18,9 @@ final class TokenBucketRateLimiter
     private const STATE_PREFIX     = 'cb_rate_limit_';
     private const LOCK_PREFIX      = 'cb_rate_limit_lock_';
     private const LOCK_TTL_SECONDS = 5;
+    private const MIN_SLEEP_MICROSECONDS = 10000;
+    private const MAX_SLEEP_MICROSECONDS = 500000;
+    private const ACQUIRE_TIMEOUT_SECONDS = 30;
 
     /**
      * Sleep callback used when bucket is empty.
@@ -66,10 +69,19 @@ final class TokenBucketRateLimiter
         $lock_key          = self::LOCK_PREFIX . $provider_id;
         $ttl_seconds       = \max(60, (int) \ceil($capacity / $refill_per_second) * 2);
         $store             = $this->get_store();
+        $started_at        = $this->now();
 
         while (true) {
+            if (($this->now() - $started_at) >= self::ACQUIRE_TIMEOUT_SECONDS) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                \error_log(\sprintf('[CloudBridge] TokenBucketRateLimiter timed out acquiring token for provider "%s".', $provider_id));
+
+                // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+                throw new \RuntimeException(\sprintf('Timed out waiting for provider rate-limit token for "%s".', $provider_id));
+            }
+
             if (! $this->try_acquire_lock($store, $lock_key)) {
-                $this->sleep(10000);
+                $this->sleep(self::MIN_SLEEP_MICROSECONDS);
                 continue;
             }
 
@@ -105,12 +117,12 @@ final class TokenBucketRateLimiter
 
                 $seconds_until_next_token = (1.0 - $tokens) / $refill_per_second;
                 $microseconds             = (int) \ceil($seconds_until_next_token * 1000000);
-                $microseconds             = \max(10000, $microseconds);
+                $microseconds             = \max(self::MIN_SLEEP_MICROSECONDS, $microseconds);
             } finally {
                 $this->release_lock($store, $lock_key);
             }
 
-            $this->sleep($microseconds);
+            $this->sleep_in_chunks($microseconds);
         }
     }
 
@@ -165,5 +177,22 @@ final class TokenBucketRateLimiter
     {
         $sleeper = $this->sleep_callback;
         $sleeper($microseconds);
+    }
+
+    /**
+     * Sleeps in capped chunks to avoid long single blocking waits.
+     *
+     * @param int $microseconds Total requested sleep time.
+     */
+    private function sleep_in_chunks(int $microseconds): void
+    {
+        $remaining = $microseconds;
+
+        while ($remaining > 0) {
+            $chunk = \min($remaining, self::MAX_SLEEP_MICROSECONDS);
+            $chunk = \max(self::MIN_SLEEP_MICROSECONDS, $chunk);
+            $this->sleep($chunk);
+            $remaining -= $chunk;
+        }
     }
 }

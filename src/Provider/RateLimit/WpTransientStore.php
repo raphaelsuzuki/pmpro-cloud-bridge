@@ -196,7 +196,12 @@ final class WpTransientStore implements TransientStoreInterface
             throw new \RuntimeException(\sprintf('Failed updating rate-limit timeout for key "%s".', $key));
         }
 
-        $new_value = (int) $wpdb->get_var('SELECT LAST_INSERT_ID()');
+        $new_value = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT CAST(option_value AS SIGNED) FROM {$wpdb->options} WHERE option_name = %s",
+                $option_name
+            )
+        );
 
         return $new_value;
     }
