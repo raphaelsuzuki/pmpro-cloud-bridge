@@ -25,6 +25,13 @@ final class WpTransientStore implements TransientStoreInterface
      */
     public function get(string $key, mixed $fallback_value = null): mixed
     {
+        if (\function_exists('wp_cache_get')) {
+            $cached_value = \wp_cache_get($key, 'cloud_bridge_rate_limit');
+            if (false !== $cached_value && null !== $cached_value) {
+                return $cached_value;
+            }
+        }
+
         if (! \function_exists('get_transient')) {
             return $fallback_value;
         }
