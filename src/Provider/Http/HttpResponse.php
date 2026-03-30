@@ -15,14 +15,14 @@ namespace CloudBridge\Provider\Http;
  */
 final class HttpResponse
 {
-	public readonly int $status_code;
+    public readonly int $status_code;
 
-	public readonly string $body;
+    public readonly string $body;
 
-	/**
-	 * @var array<string, string|array<int, string>>
-	 */
-	public readonly array $headers;
+    /**
+     * @var array<string, string|array<int, string>>
+     */
+    public readonly array $headers;
 
     /**
      * Constructor.
