@@ -103,8 +103,7 @@ final class InstanceStateMachine
      * Returns allowed target statuses for a source status.
      *
      * @return string[]
-        *
-        * @throws \LogicException When status value is unknown.
+     * @throws \LogicException When status value is unknown.
      */
     public static function allowed_targets(string $current_status): array
     {

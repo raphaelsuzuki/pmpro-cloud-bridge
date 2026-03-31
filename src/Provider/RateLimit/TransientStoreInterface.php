@@ -37,15 +37,19 @@ interface TransientStoreInterface
     public function set(string $key, mixed $value, int $ttl_seconds): bool;
 
     /**
-     * Atomically increments a numeric value.
+     * Atomically increments a numeric value using a fixed-window TTL.
      *
-     * Implementations should use native atomic primitives when available
-     * (e.g. Redis/Memcached increment operations) and set TTL when creating
-     * the key.
+     * The TTL is set when the key is first created; it is NOT refreshed on
+     * subsequent increments. This creates a fixed window (not sliding) that
+     * allows predictable rate-limit bucket boundaries.
+     *
+     * Implementations MUST use atomic primitives when available (e.g. Redis/
+     * Memcached increment operations) to prevent lost updates under concurrent
+     * access.
      *
      * @param string $key         Storage key.
      * @param int    $amount      Increment amount.
-     * @param int    $ttl_seconds Expiry in seconds.
+     * @param int    $ttl_seconds Expiry in seconds; set once at key creation.
      *
      * @return int New value after increment.
      */

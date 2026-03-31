@@ -305,15 +305,16 @@ final class VultrDriver extends AbstractProvider
 
         $plans = array();
         foreach ($decoded['plans'] as $plan) {
+            $monthly_cost = $plan['monthly_cost'] ?? 0;
             $plans[] = array(
                 'slug'        => $plan['id'],
                 'name'        => $plan['name'] ?? '',
                 'cores'       => $plan['vcpu_count'] ?? 0,
-                'memory_gb'   => $plan['ram'] / 1024, // RAM in MB.
+                'memory_gb'   => ($plan['ram'] ?? 0) / 1024, // RAM in MB.
                 'disk_gb'     => $plan['disk'] ?? 0,
                 'bandwidth_gb' => $plan['bandwidth'] ?? null,
-                'price_monthly' => $plan['monthly_cost'] ?? 0,
-                'price_hourly' => $plan['cost_per_month'] ? ($plan['cost_per_month'] / 730) : 0,
+                'price_monthly' => $monthly_cost,
+                'price_hourly' => $monthly_cost > 0 ? ($monthly_cost / 730) : 0,
             );
         }
 
@@ -436,23 +437,29 @@ final class VultrDriver extends AbstractProvider
     }
 
     /**
-     * Sends a command to an instance (power_on, power_off, reboot).
+     * Sends a command to an instance (start, halt, reboot).
+     *
+     * Maps command name to correct Vultr endpoint path.
      *
      * @param string $instance_id Provider instance ID.
-     * @param string $command Command name.
+     * @param string $command Command name ('start', 'halt', 'reboot').
      * @return ProviderResult<ActionResult>
      */
     private function send_instance_command(string $instance_id, string $command): ProviderResult
     {
-        $body = array(
-            'command' => $command,
-        );
+        // Map command to endpoint path — Vultr uses separate endpoints, no command body.
+        $endpoint = match ($command) {
+            'power_on' => '/instances/' . $instance_id . '/start',
+            'power_off' => '/instances/' . $instance_id . '/halt',
+            'reboot'   => '/instances/' . $instance_id . '/reboot',
+            default    => '/instances/' . $instance_id . '/halt',
+        };
 
         $response = $this->http_request(
             'POST',
-            self::API_BASE . '/instances/' . $instance_id . '/halt',
+            self::API_BASE . $endpoint,
             $this->get_headers(),
-            $body
+            null
         );
 
         if ($response instanceof ProviderResult) {
