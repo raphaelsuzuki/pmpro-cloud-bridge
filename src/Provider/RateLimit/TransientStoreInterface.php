@@ -43,15 +43,22 @@ interface TransientStoreInterface
      * subsequent increments. This creates a fixed window (not sliding) that
      * allows predictable rate-limit bucket boundaries.
      *
-     * Implementations MUST use atomic primitives when available (e.g. Redis/
-     * Memcached increment operations) to prevent lost updates under concurrent
-     * access.
+     * ATOMICITY IS REQUIRED. Implementations MUST guarantee atomic increments
+     * to prevent lost updates under concurrent access. Implementations expecting
+     * to back non-atomic storage (e.g., WordPress transients without object cache)
+     * MUST employ compare-and-swap semantics, locks, or fail initialization with
+     * a clear error indicating the backing store cannot provide the required
+     * atomicity guarantees for rate limiting.
+     *
+     * Race conditions in increment operations will cause rate-limiting bypass
+     * and service abuse; therefore non-atomic implementations are not acceptable
+     * for security-sensitive rate-limiting use cases.
      *
      * @param string $key         Storage key.
      * @param int    $amount      Increment amount.
      * @param int    $ttl_seconds Expiry in seconds; set once at key creation.
      *
-     * @return int New value after increment.
+     * @return int New value after increment (atomically guaranteed).
      */
     public function increment(string $key, int $amount, int $ttl_seconds): int;
 }

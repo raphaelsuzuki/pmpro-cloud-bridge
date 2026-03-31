@@ -437,22 +437,28 @@ final class VultrDriver extends AbstractProvider
     }
 
     /**
-     * Sends a command to an instance (start, halt, reboot).
+     * Sends a power/reboot command to an instance.
      *
-     * Maps command name to correct Vultr endpoint path.
+     * Maps command name to correct Vultr endpoint path. Only accepts valid
+     * command constants from CloudProviderInterface: 'power_on', 'power_off', 'reboot'.
      *
      * @param string $instance_id Provider instance ID.
-     * @param string $command Command name ('start', 'halt', 'reboot').
+     * @param string $command Command name ('power_on', 'power_off', or 'reboot').
      * @return ProviderResult<ActionResult>
+     *
+     * @throws \InvalidArgumentException If command is not one of the accepted constants.
      */
     private function send_instance_command(string $instance_id, string $command): ProviderResult
     {
         // Map command to endpoint path — Vultr uses separate endpoints, no command body.
+        // Only valid commands proceed; unknown commands reject rather than silently halt.
         $endpoint = match ($command) {
             'power_on' => '/instances/' . $instance_id . '/start',
             'power_off' => '/instances/' . $instance_id . '/halt',
             'reboot'   => '/instances/' . $instance_id . '/reboot',
-            default    => '/instances/' . $instance_id . '/halt',
+            default    => throw new \InvalidArgumentException(
+                \sprintf('Unknown instance command: "%s". Valid commands: power_on, power_off, reboot.', $command)
+            ),
         };
 
         $response = $this->http_request(
