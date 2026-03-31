@@ -1,4 +1,5 @@
 <?php
+
 /**
  * AbstractProvider — shared base for all provider drivers.
  *
@@ -14,6 +15,9 @@ declare(strict_types=1);
 
 namespace CloudBridge\Provider;
 
+use CloudBridge\Provider\Http\HttpClientInterface;
+use CloudBridge\Provider\Http\WpHttpClient;
+use CloudBridge\Provider\RateLimit\TokenBucketRateLimiter;
 use CloudBridge\Provider\Result\ProviderResult;
 
 /**
@@ -21,70 +25,161 @@ use CloudBridge\Provider\Result\ProviderResult;
  *
  * Concrete drivers extend this class and implement CloudProviderInterface.
  */
-abstract class AbstractProvider implements CloudProviderInterface {
+abstract class AbstractProvider implements CloudProviderInterface
+{
+    private const DEFAULT_HTTP_TIMEOUT = 30;
 
-	/**
-	 * Makes an HTTP request to the provider API.
-	 *
-	 * This is the only place wp_remote_*() calls are permitted in driver code.
-	 * All request parameters, base URL, and auth headers are injected by the
-	 * concrete driver.
-	 *
-	 * @param string               $method  HTTP method: GET, POST, DELETE, PATCH.
-	 * @param string               $url     Fully qualified provider API URL.
-	 * @param array<string, mixed> $headers Additional request headers (auth, idempotency, etc.).
-	 * @param mixed                $body    Request body (will be JSON-encoded if non-null).
-	 * @return array{code: int, body: string}|ProviderResult On HTTP transport failure returns ProviderResult::fail('http_error', ...).
-	 */
-	protected function http_request( string $method, string $url, array $headers = [], mixed $body = null ): array|ProviderResult {
-		$args = [
-			'method'  => strtoupper( $method ),
-			'headers' => array_merge(
-				[ 'Content-Type' => 'application/json', 'Accept' => 'application/json' ],
-				$headers
-			),
-			'timeout' => 30,
-		];
+    /**
+     * Lazily-resolved HTTP adapter.
+     *
+     * @var HttpClientInterface|null
+     */
+    private ?HttpClientInterface $http_client = null;
 
-		if ( null !== $body ) {
-			$encoded = wp_json_encode( $body );
-			if ( false === $encoded ) {
-				return ProviderResult::fail(
-					'api_error',
-					sprintf( 'Failed to JSON-encode provider request body: %s', json_last_error_msg() )
-				);
-			}
-			$args['body'] = $encoded;
-		}
+    /**
+     * Lazily-resolved shared provider rate limiter.
+     *
+     * @var TokenBucketRateLimiter|null
+     */
+    private ?TokenBucketRateLimiter $rate_limiter = null;
 
-		$response = wp_remote_request( $url, $args );
+    /**
+     * Constructor.
+     *
+     * Drivers may pass explicit dependencies, but this class also supports
+     * lazy defaults for existing constructors that do not call parent.
+     *
+     * @param HttpClientInterface|null    $http_client  Optional HTTP client implementation.
+     * @param TokenBucketRateLimiter|null $rate_limiter Optional provider rate limiter.
+     */
+    public function __construct(?HttpClientInterface $http_client = null, ?TokenBucketRateLimiter $rate_limiter = null)
+    {
+        $this->http_client  = $http_client;
+        $this->rate_limiter = $rate_limiter;
+    }
 
-		if ( is_wp_error( $response ) ) {
-			return ProviderResult::fail(
-				'http_error',
-				$response->get_error_message()
-			);
-		}
+    /**
+     * Allows tests or drivers to replace the HTTP adapter.
+     *
+     * @param HttpClientInterface $http_client HTTP adapter implementation.
+     */
+    protected function set_http_client(HttpClientInterface $http_client): void
+    {
+        $this->http_client = $http_client;
+    }
 
-		return [
-			'code' => wp_remote_retrieve_response_code( $response ),
-			'body' => wp_remote_retrieve_body( $response ),
-		];
-	}
+    /**
+     * Allows tests or drivers to replace the shared limiter.
+     *
+     * @param TokenBucketRateLimiter $rate_limiter Provider limiter.
+     */
+    protected function set_rate_limiter(TokenBucketRateLimiter $rate_limiter): void
+    {
+        $this->rate_limiter = $rate_limiter;
+    }
 
-	/**
-	 * Decodes a JSON response body.
-	 *
-	 * @param string $body Raw response body.
-	 * @return array<mixed>|null Decoded array, or null on parse failure.
-	 */
-	protected function decode_json( string $body ): ?array {
-		$decoded = json_decode( $body, true );
+    /**
+     * Makes an HTTP request to the provider API.
+     *
+     * This method throttles requests via token bucket before sending.
+     * Transport implementation is injected via HttpClientInterface.
+     *
+     * @param string               $method  HTTP method: GET, POST, DELETE, PATCH.
+     * @param string               $url     Fully qualified provider API URL.
+     * @param array<string, mixed> $headers Additional request headers (auth, idempotency, etc.).
+     * @param mixed                $body    Request body (will be JSON-encoded if non-null).
+     * @return array{code:int, body:string}|ProviderResult<null>
+     */
+    protected function http_request(string $method, string $url, array $headers = array(), mixed $body = null)
+    {
+        $rate_limits = $this->get_rate_limits();
+        try {
+            $this->get_rate_limiter()->acquire(
+                $this->get_id(),
+                (int) $rate_limits['max_requests_per_minute'],
+                (int) $rate_limits['burst']
+            );
+        } catch (\RuntimeException $exception) {
+            return ProviderResult::fail('rate_limit_error', $exception->getMessage());
+        }
 
-		if ( ! is_array( $decoded ) ) {
-			return null;
-		}
+        $payload = null;
+        if (null !== $body) {
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
+            $encoded = \json_encode($body);
+            if (false === $encoded) {
+                return ProviderResult::fail(
+                    'api_error',
+                    sprintf('Failed to JSON-encode provider request body: %s', \json_last_error_msg())
+                );
+            }
+            $payload = $encoded;
+        }
 
-		return $decoded;
-	}
+        $headers = array_merge(
+            array(
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
+            ),
+            $headers
+        );
+
+        try {
+            $response = $this->get_http_client()->request(
+                $method,
+                $url,
+                $headers,
+                $payload,
+                self::DEFAULT_HTTP_TIMEOUT
+            );
+        } catch (\RuntimeException $exception) {
+            return ProviderResult::fail('http_error', $exception->getMessage());
+        }
+
+        return array(
+            'code' => $response->status_code,
+            'body' => $response->body,
+        );
+    }
+
+    /**
+     * Decodes a JSON response body.
+     *
+     * @param string $body Raw response body.
+     * @return array<mixed>|null Decoded array, or null on parse failure.
+     */
+    protected function decode_json(string $body): ?array
+    {
+        $decoded = \json_decode($body, true);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Returns the active HTTP adapter.
+     */
+    private function get_http_client(): HttpClientInterface
+    {
+        if (null === $this->http_client) {
+            $this->http_client = new WpHttpClient();
+        }
+
+        return $this->http_client;
+    }
+
+    /**
+     * Returns the active provider rate limiter.
+     */
+    private function get_rate_limiter(): TokenBucketRateLimiter
+    {
+        if (null === $this->rate_limiter) {
+            $this->rate_limiter = new TokenBucketRateLimiter();
+        }
+
+        return $this->rate_limiter;
+    }
 }
