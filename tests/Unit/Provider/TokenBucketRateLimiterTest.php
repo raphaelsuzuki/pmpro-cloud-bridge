@@ -96,4 +96,52 @@ class TokenBucketRateLimiterTest extends TestCase
 
         $this->assertSame(0, $sleep_calls);
     }
+
+    public function test_acquire_allows_sub_10ms_wait_for_high_rates(): void
+    {
+        $store              = new InMemoryTransientStore();
+        $time               = 3000.0;
+        $last_microseconds  = 0;
+
+        $limiter = new TokenBucketRateLimiter(
+            $store,
+            static function (int $microseconds) use (&$time, &$last_microseconds): void {
+                $last_microseconds = $microseconds;
+                $time += $microseconds / 1000000;
+            },
+            static function () use (&$time): float {
+                return $time;
+            }
+        );
+
+        $limiter->acquire('fast-provider', 60000, 1);
+        $limiter->acquire('fast-provider', 60000, 1);
+
+        $this->assertGreaterThan(0, $last_microseconds);
+        $this->assertLessThan(10000, $last_microseconds);
+    }
+
+    public function test_acquire_waits_more_than_30_seconds_for_low_rate(): void
+    {
+        $store       = new InMemoryTransientStore();
+        $time        = 4000.0;
+        $sleep_calls = 0;
+
+        $limiter = new TokenBucketRateLimiter(
+            $store,
+            static function (int $microseconds) use (&$time, &$sleep_calls): void {
+                ++$sleep_calls;
+                $time += $microseconds / 1000000;
+            },
+            static function () use (&$time): float {
+                return $time;
+            }
+        );
+
+        $limiter->acquire('slow-provider', 1, 1);
+        $limiter->acquire('slow-provider', 1, 1);
+
+        $this->assertGreaterThan(0, $sleep_calls);
+        $this->assertGreaterThanOrEqual(4060.0, $time);
+    }
 }

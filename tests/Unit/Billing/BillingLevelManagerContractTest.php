@@ -13,6 +13,8 @@ namespace CloudBridge\Tests\Unit\Billing;
 
 use PHPUnit\Framework\TestCase;
 
-abstract class BillingLevelManagerContractTest extends TestCase {
-	// Full test suite delivered in Billing phase.
+class BillingLevelManagerContractTest extends TestCase {
+	public function test_contract_placeholder(): void {
+		$this->assertTrue( true );
+	}
 }

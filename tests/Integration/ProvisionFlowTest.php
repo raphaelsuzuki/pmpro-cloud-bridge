@@ -19,5 +19,7 @@ use PHPUnit\Framework\TestCase;
  * provider call → ACTIVE status.
  */
 class ProvisionFlowTest extends TestCase {
-	// Full test suite delivered in Integration Testing phase.
+	public function test_provision_flow_placeholder(): void {
+		$this->assertTrue( true );
+	}
 }

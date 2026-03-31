@@ -56,6 +56,12 @@ final class HttpResponse
                 );
             }
 
+            if (! \array_is_list($header_value)) {
+                throw new \InvalidArgumentException(
+                    sprintf('Invalid header value for "%s". Expected a list of strings.', $header_name)
+                );
+            }
+
             foreach ($header_value as $item) {
                 if (! is_string($item)) {
                     throw new \InvalidArgumentException(
