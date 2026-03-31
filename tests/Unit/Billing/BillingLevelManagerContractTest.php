@@ -1,4 +1,5 @@
 <?php
+
 /**
  * BillingLevelManagerContractTest — contract tests for BillingLevelManagerInterface.
  *
@@ -13,8 +14,10 @@ namespace CloudBridge\Tests\Unit\Billing;
 
 use PHPUnit\Framework\TestCase;
 
-class BillingLevelManagerContractTest extends TestCase {
-	public function test_contract_placeholder(): void {
-		$this->assertTrue( true );
-	}
+class BillingLevelManagerContractTest extends TestCase
+{
+    public function test_contract_placeholder(): void
+    {
+        $this->assertTrue(true);
+    }
 }

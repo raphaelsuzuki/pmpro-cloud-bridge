@@ -1,4 +1,5 @@
 <?php
+
 /**
  * ProvisionFlowTest — integration test for the full provisioning flow.
  *
@@ -18,8 +19,10 @@ use PHPUnit\Framework\TestCase;
  * payment confirmed → ProvisionIntent created → job dispatched →
  * provider call → ACTIVE status.
  */
-class ProvisionFlowTest extends TestCase {
-	public function test_provision_flow_placeholder(): void {
-		$this->assertTrue( true );
-	}
+class ProvisionFlowTest extends TestCase
+{
+    public function test_provision_flow_placeholder(): void
+    {
+        $this->assertTrue(true);
+    }
 }

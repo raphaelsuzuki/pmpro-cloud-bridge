@@ -1,4 +1,5 @@
 <?php
+
 /**
  * MagicLevelsAdapterTest — unit tests for MagicLevelsAdapter.
  *
@@ -13,8 +14,10 @@ namespace CloudBridge\Tests\Unit\Billing;
 
 use PHPUnit\Framework\TestCase;
 
-class MagicLevelsAdapterTest extends TestCase {
-	public function test_adapter_placeholder(): void {
-		$this->assertTrue( true );
-	}
+class MagicLevelsAdapterTest extends TestCase
+{
+    public function test_adapter_placeholder(): void
+    {
+        $this->assertTrue(true);
+    }
 }
