@@ -74,16 +74,16 @@ final class ProviderResult
      * @param string $error_message Human-readable description of the failure.
      * @return self<null>
      *
-     * @throws \InvalidArgumentException If error_code not in ERROR_CODES.
+     * @throws \InvalidArgumentException When $error_code is not in self::ERROR_CODES.
      */
     public static function fail(string $error_code, string $error_message): self
     {
-        if (! \in_array($error_code, self::ERROR_CODES, true)) {
+        if (! in_array($error_code, self::ERROR_CODES, true)) {
             throw new \InvalidArgumentException(
-                \sprintf(
-                    'Invalid error code "%s"; must be one of: %s',
+                sprintf(
+                    'Invalid provider error code "%s". Allowed codes: %s.',
                     $error_code,
-                    \implode(', ', self::ERROR_CODES)
+                    implode(', ', self::ERROR_CODES)
                 )
             );
         }

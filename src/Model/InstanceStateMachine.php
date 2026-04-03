@@ -94,6 +94,10 @@ final class InstanceStateMachine
             throw new \LogicException(sprintf('Unknown target status "%s".', $new_status));
         }
 
+        if ($current_status === $new_status) {
+            return true;
+        }
+
         $allowed = self::ALLOWED_TRANSITIONS[ $current_status ] ?? [];
 
         return in_array($new_status, $allowed, true);
