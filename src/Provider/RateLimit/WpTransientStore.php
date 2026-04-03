@@ -108,11 +108,6 @@ final class WpTransientStore implements TransientStoreInterface
                 throw new \RuntimeException(\sprintf('Rate-limit cache increment failed for key "%s".', $key));
             }
 
-            // Refresh TTL to maintain fixed window semantics across backends.
-            // Note: This loses strict atomicity compared to native cache increment,
-            // but preserves TTL refresh consistency with the SQL backend.
-            \wp_cache_set($key, $new_value, $group, $ttl_seconds);
-
             return (int) $new_value;
         }
 
@@ -169,22 +164,12 @@ final class WpTransientStore implements TransientStoreInterface
             }
         }
 
-        // Read current value FIRST to calculate result without SELECT-after-INSERT race condition.
-        // The subsequent INSERT/UPDATE may be delayed or superseded by concurrent requests,
-        // but we correctly return what THIS request increments by.
-        $current_value = (int) ($wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT CAST(option_value AS SIGNED) FROM {$wpdb->options} WHERE option_name = %s",
-                $option_name
-            )
-        ) ?? 0);
-        $calculated_new_value = $current_value + $amount;
-
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $incremented = $wpdb->query(
             $wpdb->prepare(
                 "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
 				VALUES (%s, %s, 'off')
-				ON DUPLICATE KEY UPDATE option_value = option_value + %d",
+				ON DUPLICATE KEY UPDATE option_value = LAST_INSERT_ID(option_value + %d)",
                 $option_name,
                 (string) $amount,
                 $amount
@@ -195,6 +180,10 @@ final class WpTransientStore implements TransientStoreInterface
             // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
             throw new \RuntimeException(\sprintf('Failed incrementing rate-limit value for key "%s".', $key));
         }
+
+        $new_value = (1 === $incremented)
+            ? $amount
+            : (int) $wpdb->insert_id;
 
         $timeout_updated = $wpdb->query(
             $wpdb->prepare(
@@ -211,7 +200,7 @@ final class WpTransientStore implements TransientStoreInterface
             throw new \RuntimeException(\sprintf('Failed updating rate-limit timeout for key "%s".', $key));
         }
 
-        return $calculated_new_value;
+        return $new_value;
     }
 
     /**

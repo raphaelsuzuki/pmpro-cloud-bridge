@@ -219,8 +219,8 @@ final class VultrDriver extends AbstractProvider
         );
 
         $response = $this->http_request(
-            'POST',
-            self::API_BASE . '/instances/' . $provider_instance_id . '/reinstall',
+            'PATCH',
+            self::API_BASE . '/instances/' . $provider_instance_id,
             $this->get_headers(),
             $body
         );
