@@ -30,6 +30,10 @@ final class WpHttpClient implements HttpClientInterface
      */
     public function request(string $method, string $url, array $headers = array(), ?string $body = null, int $timeout = 30): HttpResponse
     {
+        if (! \is_int($timeout) || $timeout <= 0) {
+            throw new \InvalidArgumentException('Timeout must be a positive integer.');
+        }
+
         if (! \function_exists('wp_remote_request')) {
             throw new \RuntimeException('WordPress HTTP API is not available.');
         }

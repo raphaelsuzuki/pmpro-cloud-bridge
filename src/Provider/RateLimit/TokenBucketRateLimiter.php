@@ -40,10 +40,10 @@ final class TokenBucketRateLimiter
     /**
      * Constructor.
      *
-     * @param TransientStoreInterface|null $store          State backend.
-     * @param callable|null                $sleep_callback Receives microseconds to sleep.
-     * @param callable|null                $clock_callback Returns current timestamp float.
-    * @param int|null                     $acquire_timeout_seconds Acquire timeout in seconds; null uses adaptive timeout and <=0 disables timeout.
+     * @param TransientStoreInterface|null $store                    State backend.
+     * @param callable|null                $sleep_callback           Receives microseconds to sleep.
+     * @param callable|null                $clock_callback           Returns current timestamp float.
+     * @param int|null                     $acquire_timeout_seconds  Acquire timeout in seconds; null uses adaptive timeout and <=0 disables timeout.
      */
     public function __construct(
         private readonly ?TransientStoreInterface $store = null,
@@ -143,6 +143,11 @@ final class TokenBucketRateLimiter
 
     /**
      * Releases a previously acquired short-lived lock.
+     *
+     * NOTE: This is a best-effort lock release. Setting to 0 can lose concurrent
+     * increments if another process releases simultaneously. This is acceptable for
+     * short-lived rate-limit locks where TTL will expire shortly. Future versions
+     * should use delete() from TransientStoreInterface when available.
      *
      * @param TransientStoreInterface $store    State store.
      * @param string                  $lock_key Lock key.

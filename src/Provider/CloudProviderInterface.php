@@ -200,6 +200,7 @@ interface CloudProviderInterface
      * No raw provider status string may reach the state machine directly.
      *
      * @param string $provider_state Raw status string from the provider API.
+     * @return string InstanceStatus constant value.
      */
     public function normalise_state(string $provider_state): string;
 }

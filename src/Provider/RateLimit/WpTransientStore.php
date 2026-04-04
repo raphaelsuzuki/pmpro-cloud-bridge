@@ -108,8 +108,6 @@ final class WpTransientStore implements TransientStoreInterface
                 throw new \RuntimeException(\sprintf('Rate-limit cache increment failed for key "%s".', $key));
             }
 
-            // Keep increment atomic: do not issue a subsequent write that can
-            // clobber concurrent increments. TTL refresh is backend-specific.
             return (int) $new_value;
         }
 
@@ -166,13 +164,15 @@ final class WpTransientStore implements TransientStoreInterface
             }
         }
 
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $incremented = $wpdb->query(
             $wpdb->prepare(
                 "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
 				VALUES (%s, %s, 'off')
-				ON DUPLICATE KEY UPDATE option_value = LAST_INSERT_ID(COALESCE(CAST(option_value AS SIGNED), 0) + VALUES(option_value))",
+				ON DUPLICATE KEY UPDATE option_value = LAST_INSERT_ID(option_value + %d)",
                 $option_name,
-                (string) $amount
+                (string) $amount,
+                $amount
             )
         );
 
@@ -181,11 +181,15 @@ final class WpTransientStore implements TransientStoreInterface
             throw new \RuntimeException(\sprintf('Failed incrementing rate-limit value for key "%s".', $key));
         }
 
+        $new_value = (1 === $incremented)
+            ? $amount
+            : (int) $wpdb->insert_id;
+
         $timeout_updated = $wpdb->query(
             $wpdb->prepare(
                 "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
 				VALUES (%s, %s, 'off')
-				ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)",
+				ON DUPLICATE KEY UPDATE option_value = option_value",
                 $timeout_key,
                 (string) $expires_at
             )
@@ -195,13 +199,6 @@ final class WpTransientStore implements TransientStoreInterface
             // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
             throw new \RuntimeException(\sprintf('Failed updating rate-limit timeout for key "%s".', $key));
         }
-
-        $new_value = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT CAST(option_value AS SIGNED) FROM {$wpdb->options} WHERE option_name = %s",
-                $option_name
-            )
-        );
 
         return $new_value;
     }

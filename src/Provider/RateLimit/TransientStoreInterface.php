@@ -37,17 +37,28 @@ interface TransientStoreInterface
     public function set(string $key, mixed $value, int $ttl_seconds): bool;
 
     /**
-     * Atomically increments a numeric value.
+     * Atomically increments a numeric value using a fixed-window TTL.
      *
-     * Implementations should use native atomic primitives when available
-     * (e.g. Redis/Memcached increment operations) and set TTL when creating
-     * the key.
+     * The TTL is set when the key is first created; it is NOT refreshed on
+     * subsequent increments. This creates a fixed window (not sliding) that
+     * allows predictable rate-limit bucket boundaries.
+     *
+     * ATOMICITY IS REQUIRED. Implementations MUST guarantee atomic increments
+     * to prevent lost updates under concurrent access. Implementations expecting
+     * to back non-atomic storage (e.g., WordPress transients without object cache)
+     * MUST employ compare-and-swap semantics, locks, or fail initialization with
+     * a clear error indicating the backing store cannot provide the required
+     * atomicity guarantees for rate limiting.
+     *
+     * Race conditions in increment operations will cause rate-limiting bypass
+     * and service abuse; therefore non-atomic implementations are not acceptable
+     * for security-sensitive rate-limiting use cases.
      *
      * @param string $key         Storage key.
      * @param int    $amount      Increment amount.
-     * @param int    $ttl_seconds Expiry in seconds.
+     * @param int    $ttl_seconds Expiry in seconds; set once at key creation.
      *
-     * @return int New value after increment.
+     * @return int New value after increment (atomically guaranteed).
      */
     public function increment(string $key, int $amount, int $ttl_seconds): int;
 }

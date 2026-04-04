@@ -16,13 +16,14 @@ namespace CloudBridge\Security;
  * Stores and retrieves provider API credentials encrypted at rest.
  *
  * Uses sodium_crypto_secretbox() with key material from CB_ENCRYPTION_KEY.
- * If unavailable, it falls back to AUTH_KEY + SECURE_AUTH_KEY + site_url()
+ * If unavailable, it falls back to AUTH_KEY + SECURE_AUTH_KEY
  * and raises an admin warning because that fallback should be temporary.
  */
 final class CredentialStore
 {
     private const OPTION_PREFIX = 'cb_credential_';
     private const MIN_FALLBACK_KEY_MATERIAL_LENGTH = 64;
+    private const LEGACY_KEY_MATERIAL_DETECTED_OPTION = 'cb_credentials_legacy_material_detected';
 
     /**
      * Ensures fallback warning hook is only registered once.
@@ -30,6 +31,13 @@ final class CredentialStore
      * @var bool
      */
     private static bool $fallback_notice_registered = false;
+
+    /**
+     * Ensures legacy key-material warning hook is only registered once.
+     *
+     * @var bool
+     */
+    private static bool $legacy_notice_registered = false;
 
     /**
      * Optional override used for deterministic tests.
@@ -106,11 +114,25 @@ final class CredentialStore
         $key       = $this->resolve_encryption_key();
         $plaintext = \sodium_crypto_secretbox_open($cipher, $nonce, $key);
 
-        if (false === $plaintext) {
+        if (false !== $plaintext) {
+            return $plaintext;
+        }
+
+        // Detect legacy credentials encrypted with the old unstable fallback
+        // (AUTH_KEY + SECURE_AUTH_KEY + site_url()) so admins can rotate.
+        $legacy_key = $this->resolve_legacy_encryption_key();
+        if (null === $legacy_key) {
             return null;
         }
 
-        return $plaintext;
+        $legacy_plaintext = \sodium_crypto_secretbox_open($cipher, $nonce, $legacy_key);
+        if (false === $legacy_plaintext) {
+            return null;
+        }
+
+        $this->record_legacy_material_detection($provider_id);
+
+        return $legacy_plaintext;
     }
 
     /**
@@ -165,8 +187,7 @@ final class CredentialStore
             } else {
                 $auth_key        = \defined('AUTH_KEY') && \is_string(AUTH_KEY) ? AUTH_KEY : '';
                 $secure_auth_key = \defined('SECURE_AUTH_KEY') && \is_string(SECURE_AUTH_KEY) ? SECURE_AUTH_KEY : '';
-                $site_url        = \function_exists('site_url') ? (string) \site_url() : '';
-                $key_material    = $auth_key . $secure_auth_key . $site_url;
+                $key_material     = $auth_key . $secure_auth_key;
 
                 if (\strlen($key_material) < self::MIN_FALLBACK_KEY_MATERIAL_LENGTH) {
                     throw new \RuntimeException('Credential encryption fallback key material is too weak. Define CB_ENCRYPTION_KEY in wp-config.php.');
@@ -185,6 +206,89 @@ final class CredentialStore
             '',
             SODIUM_CRYPTO_SECRETBOX_KEYBYTES
         );
+    }
+
+    /**
+     * Resolves the legacy fallback key (AUTH_KEY + SECURE_AUTH_KEY + site_url()).
+     *
+     * Returns null if insufficient material is available.
+     *
+     * @return string|null
+     */
+    private function resolve_legacy_encryption_key(): ?string
+    {
+        if (null !== $this->key_override && '' !== $this->key_override) {
+            return null;
+        }
+
+        $auth_key        = \defined('AUTH_KEY') && \is_string(AUTH_KEY) ? AUTH_KEY : '';
+        $secure_auth_key = \defined('SECURE_AUTH_KEY') && \is_string(SECURE_AUTH_KEY) ? SECURE_AUTH_KEY : '';
+        $site_url        = \function_exists('site_url') ? (string) \site_url() : '';
+        $key_material    = $auth_key . $secure_auth_key . $site_url;
+
+        if (\strlen($key_material) < self::MIN_FALLBACK_KEY_MATERIAL_LENGTH) {
+            return null;
+        }
+
+        return \sodium_crypto_generichash(
+            $key_material,
+            '',
+            SODIUM_CRYPTO_SECRETBOX_KEYBYTES
+        );
+    }
+
+    /**
+     * Records detection of legacy unstable key material usage and warns admins.
+     *
+     * @param string $provider_id Provider slug.
+     */
+    private function record_legacy_material_detection(string $provider_id): void
+    {
+        $detected = \get_option(self::LEGACY_KEY_MATERIAL_DETECTED_OPTION, array());
+        if (! \is_array($detected)) {
+            $detected = array();
+        }
+
+        $detected[$provider_id] = \time();
+        \update_option(self::LEGACY_KEY_MATERIAL_DETECTED_OPTION, $detected, false);
+
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        \error_log(\sprintf(
+            '[CloudBridge] Credential for provider "%s" was decrypted using legacy site_url-based key material. Re-enter credential to re-encrypt with stable key material.',
+            $provider_id
+        ));
+
+        if (self::$legacy_notice_registered) {
+            return;
+        }
+
+        if (! \function_exists('add_action')) {
+            return;
+        }
+
+        \add_action(
+            'admin_notices',
+            static function (): void {
+                if (\function_exists('current_user_can') && ! \current_user_can('manage_options')) {
+                    return;
+                }
+
+                $detected = \get_option(self::LEGACY_KEY_MATERIAL_DETECTED_OPTION, array());
+                if (! \is_array($detected) || array() === $detected) {
+                    return;
+                }
+
+                \printf(
+                    '<div class="notice notice-warning"><p>%s</p></div>',
+                    \esc_html__(
+                        'Cloud Bridge detected credentials encrypted with legacy site_url-based key material. Please re-enter provider credentials to re-encrypt with stable key material.',
+                        'cloud-bridge-for-pmpro'
+                    )
+                );
+            }
+        );
+
+        self::$legacy_notice_registered = true;
     }
 
     /**
