@@ -5,7 +5,7 @@
  *
  * Implements CloudProviderInterface for Vultr Cloud Compute.
  *
- * Authentication: X-API-Key header.
+ * Authentication: Authorization Bearer token header.
  * Idempotency: X-Request-ID header on POST /instances.
  * Rate limit: 30 req/s (1800 req/min).
  * API docs: https://www.vultr.com/api/#server
@@ -432,7 +432,7 @@ final class VultrDriver extends AbstractProvider
     private function get_headers(): array
     {
         return array(
-            'X-API-Key' => $this->api_key,
+            'Authorization' => 'Bearer ' . $this->api_key,
         );
     }
 
