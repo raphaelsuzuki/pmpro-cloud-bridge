@@ -95,7 +95,7 @@ class VultrDriverTest extends TestCase
     public function test_normalise_state_stopped(): void
     {
         $this->assertSame(InstanceStatus::STOPPED, $this->driver->normalise_state('stopped'));
-        $this->assertSame(InstanceStatus::STOPPED, $this->driver->normalise_state('suspended'));
+        $this->assertSame(InstanceStatus::SUSPENDED, $this->driver->normalise_state('suspended'));
     }
 
     /**

@@ -79,7 +79,12 @@ final class VultrDriver extends AbstractProvider
         }
 
         if (200 !== $response['code']) {
-            return ProviderResult::fail('auth_failed', 'Invalid or expired Vultr API key.');
+            if (in_array($response['code'], array(401, 403), true)) {
+                return ProviderResult::fail('auth_failed', 'Invalid or expired Vultr API key.');
+            }
+
+            $error_msg = $this->extract_error_message($response['body'], 'Failed to validate Vultr credentials.');
+            return ProviderResult::fail('api_error', $error_msg);
         }
 
         return ProviderResult::ok(true);
@@ -268,10 +273,9 @@ final class VultrDriver extends AbstractProvider
             return ProviderResult::fail('api_error', 'Invalid response structure from Vultr API.');
         }
 
-        $provider_status = $decoded['instance']['status'] ?? 'unknown';
-        $normalized_status = $this->normalise_state($provider_status);
+        $provider_status = (string) ($decoded['instance']['status'] ?? 'unknown');
 
-        return ProviderResult::ok($normalized_status);
+        return ProviderResult::ok($provider_status);
     }
 
     // -------------------------------------------------------------------------
@@ -412,7 +416,7 @@ final class VultrDriver extends AbstractProvider
             'pending'       => InstanceStatus::PROVISIONING,
             'active'        => InstanceStatus::ACTIVE,
             'stopped'       => InstanceStatus::STOPPED,
-            'suspended'     => InstanceStatus::STOPPED,
+            'suspended'     => InstanceStatus::SUSPENDED,
             'resizing'      => InstanceStatus::REBUILDING,
             'reboot'        => InstanceStatus::REBOOTING,
             'reinstalling'  => InstanceStatus::REBUILDING,

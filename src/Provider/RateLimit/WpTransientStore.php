@@ -189,7 +189,7 @@ final class WpTransientStore implements TransientStoreInterface
             $wpdb->prepare(
                 "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
 				VALUES (%s, %s, 'off')
-				ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)",
+				ON DUPLICATE KEY UPDATE option_value = option_value",
                 $timeout_key,
                 (string) $expires_at
             )
