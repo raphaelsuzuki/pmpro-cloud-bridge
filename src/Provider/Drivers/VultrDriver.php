@@ -274,8 +274,9 @@ final class VultrDriver extends AbstractProvider
         }
 
         $provider_status = (string) ($decoded['instance']['status'] ?? 'unknown');
+        $normalized_status = $this->normalise_state($provider_status);
 
-        return ProviderResult::ok($provider_status);
+        return ProviderResult::ok($normalized_status);
     }
 
     // -------------------------------------------------------------------------
