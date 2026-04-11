@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace CloudBridge;
 
+use CloudBridge\Provider\ProviderBootstrap;
+
 /**
  * Plugin bootstrap singleton.
  *
@@ -65,6 +67,9 @@ final class Plugin {
 		// Flush rewrite rules after CPTs are registered (priority 10 and 15).
 		// Must run on the init action at a later priority so CPTs exist first.
 		\add_action( 'init', [ self::class, 'maybe_flush_rewrite_rules' ], 20 );
+
+// Register all cloud provider drivers.
+ProviderBootstrap::init();
 	}
 
 	/**

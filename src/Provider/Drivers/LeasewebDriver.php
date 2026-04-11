@@ -1,13 +1,12 @@
 <?php
 /**
- * HetznerDriver — Hetzner Cloud (API v1).
+ * LeasewebDriver — Leaseweb (API v2).
  *
- * Implements CloudProviderInterface for Hetzner Cloud.
+ * Implements CloudProviderInterface for Leaseweb Cloud.
  *
  * Authentication: Authorization Bearer token header.
- * Idempotency: X-Idempotency-Key header.
- * Rate limit: 3600 req/hour per token (60 req/min, burst 10).
- * API docs: https://docs.hetzner.cloud/
+ * Rate limit: 100 req/min (typical).
+ * API docs: Check .localdocs/openapi.json for exact spec.
  *
  * @package CloudBridge\Provider\Drivers
  */
@@ -24,21 +23,21 @@ use CloudBridge\Provider\DTO\ProvisionResult;
 use CloudBridge\Provider\Result\ProviderResult;
 
 /**
- * Hetzner Cloud driver (API v1).
+ * Leaseweb driver (API v2).
  *
  * Zero WordPress coupling. Configuration injected via constructor.
  */
-final class HetznerDriver extends AbstractProvider {
+final class LeasewebDriver extends AbstractProvider {
 
-	private const API_BASE = 'https://api.hetzner.cloud/v1';
+	private const API_BASE = 'https://api.leaseweb.com/v2';
 
 	/**
 	 * Constructor.
 	 *
-	 * @param string $api_token Hetzner API token.
+	 * @param string $api_key Leaseweb API key.
 	 */
 	public function __construct(
-		private readonly string $api_token,
+		private readonly string $api_key,
 	) {
 	}
 
@@ -52,7 +51,7 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return string Provider identifier.
 	 */
 	public function get_id(): string {
-		return 'hetzner';
+		return 'leaseweb';
 	}
 
 	/**
@@ -61,7 +60,7 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return string Human-readable provider label.
 	 */
 	public function get_label(): string {
-		return 'Hetzner Cloud';
+		return 'Leaseweb';
 	}
 
 	/**
@@ -70,7 +69,7 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return string Provider API version.
 	 */
 	public function get_api_version(): string {
-		return 'v1';
+		return 'v2';
 	}
 
 	// -------------------------------------------------------------------------
@@ -85,7 +84,7 @@ final class HetznerDriver extends AbstractProvider {
 	public function validate_credentials(): ProviderResult {
 		$response = $this->http_request(
 			'GET',
-			self::API_BASE . '/account',
+			self::API_BASE . '/instances?limit=1',
 			$this->get_headers()
 		);
 
@@ -95,10 +94,10 @@ final class HetznerDriver extends AbstractProvider {
 
 		if ( 200 !== $response['code'] ) {
 			if ( in_array( $response['code'], array( 401, 403 ), true ) ) {
-				return ProviderResult::fail( 'auth_failed', 'Invalid or expired Hetzner API token.' );
+				return ProviderResult::fail( 'auth_failed', 'Invalid or expired Leaseweb API key.' );
 			}
 
-			$error_msg = $this->extract_error_message( $response['body'], 'Failed to validate Hetzner credentials.' );
+			$error_msg = $this->extract_error_message( $response['body'], 'Failed to validate Leaseweb credentials.' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
@@ -138,39 +137,28 @@ final class HetznerDriver extends AbstractProvider {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Provisions a new Hetzner instance.
+	 * Provisions a new Leaseweb instance.
 	 *
 	 * @param ProvisionRequest $request Provisioning request payload.
 	 * @return ProviderResult Provisioning result.
 	 */
 	public function provision( ProvisionRequest $request ): ProviderResult {
 		$body = array(
-			'name'        => $request->hostname,
-			'server_type' => $request->plan_slug,
-			'location'    => $request->region_slug,
-			'image'       => $request->image_id,
-			'public_net'  => array(
-				'enable_ipv4' => true,
-				'enable_ipv6' => true,
-			),
+			'hostname' => $request->hostname,
+			'region'   => $request->region_slug,
+			'type'     => $request->plan_slug,
+			'image'    => $request->image_id,
 		);
 
 		// Add SSH keys if provided.
 		if ( ! empty( $request->ssh_key_ids ) ) {
-			$body['ssh_keys'] = array_map( 'intval', $request->ssh_key_ids );
+			$body['ssh_keys'] = array_map( 'strval', $request->ssh_key_ids );
 		}
-
-		$headers = array_merge(
-			$this->get_headers(),
-			array(
-				'X-Idempotency-Key' => 'cb_' . $request->idempotency_key,
-			)
-		);
 
 		$response = $this->http_request(
 			'POST',
-			self::API_BASE . '/servers',
-			$headers,
+			self::API_BASE . '/instances',
+			$this->get_headers(),
 			$body
 		);
 
@@ -184,19 +172,17 @@ final class HetznerDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['server'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from Hetzner API.' );
+		if ( null === $decoded || ! isset( $decoded['id'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
-		$instance = $decoded['server'];
-
-		$ipv4 = $this->extract_ipv4( $instance );
-		$ipv6 = $this->extract_ipv6( $instance );
+		$ipv4 = $this->extract_ipv4( $decoded );
+		$ipv6 = $this->extract_ipv6( $decoded );
 
 		return ProviderResult::ok(
 			new ProvisionResult(
-				provider_instance_id: (string) $instance['id'],
-				provider_status: $instance['status'] ?? 'initializing',
+				provider_instance_id: (string) $decoded['id'],
+				provider_status: $decoded['state'] ?? 'provisioning',
 				ipv4: $ipv4,
 				ipv6: $ipv6
 			)
@@ -216,7 +202,7 @@ final class HetznerDriver extends AbstractProvider {
 	public function destroy( string $provider_instance_id ): ProviderResult {
 		$response = $this->http_request(
 			'DELETE',
-			self::API_BASE . '/servers/' . $provider_instance_id,
+			self::API_BASE . '/instances/' . $provider_instance_id,
 			$this->get_headers()
 		);
 
@@ -224,13 +210,13 @@ final class HetznerDriver extends AbstractProvider {
 			return $response;
 		}
 
-		// Hetzner returns 204 No Content on successful deletion.
+		// Leaseweb returns 204 No Content on successful deletion.
 		if ( 204 !== $response['code'] ) {
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to destroy instance' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
-		return ProviderResult::ok( new ActionResult( provider_action_id: 'hetzner-destroy-' . $provider_instance_id ) );
+		return ProviderResult::ok( new ActionResult( provider_action_id: 'leaseweb-destroy-' . $provider_instance_id ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -244,7 +230,7 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return ProviderResult Power-on result.
 	 */
 	public function power_on( string $provider_instance_id ): ProviderResult {
-		return $this->send_instance_command( $provider_instance_id, 'power_on' );
+		return $this->send_instance_action( $provider_instance_id, 'start' );
 	}
 
 	/**
@@ -254,7 +240,7 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return ProviderResult Power-off result.
 	 */
 	public function power_off( string $provider_instance_id ): ProviderResult {
-		return $this->send_instance_command( $provider_instance_id, 'power_off' );
+		return $this->send_instance_action( $provider_instance_id, 'stop' );
 	}
 
 	/**
@@ -264,7 +250,7 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return ProviderResult Reboot result.
 	 */
 	public function reboot( string $provider_instance_id ): ProviderResult {
-		return $this->send_instance_command( $provider_instance_id, 'reboot' );
+		return $this->send_instance_action( $provider_instance_id, 'reboot' );
 	}
 
 	// -------------------------------------------------------------------------
@@ -285,7 +271,7 @@ final class HetznerDriver extends AbstractProvider {
 
 		$response = $this->http_request(
 			'POST',
-			self::API_BASE . '/servers/' . $provider_instance_id . '/actions/rebuild',
+			self::API_BASE . '/instances/' . $provider_instance_id . '/actions/rebuild',
 			$this->get_headers(),
 			$body
 		);
@@ -294,12 +280,12 @@ final class HetznerDriver extends AbstractProvider {
 			return $response;
 		}
 
-		if ( 201 !== $response['code'] ) {
+		if ( 200 !== $response['code'] && 201 !== $response['code'] ) {
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to rebuild instance' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
-		return ProviderResult::ok( new ActionResult( provider_action_id: 'hetzner-rebuild-' . $provider_instance_id ) );
+		return ProviderResult::ok( new ActionResult( provider_action_id: 'leaseweb-rebuild-' . $provider_instance_id ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -315,7 +301,7 @@ final class HetznerDriver extends AbstractProvider {
 	public function get_instance_status( string $provider_instance_id ): ProviderResult {
 		$response = $this->http_request(
 			'GET',
-			self::API_BASE . '/servers/' . $provider_instance_id,
+			self::API_BASE . '/instances/' . $provider_instance_id,
 			$this->get_headers()
 		);
 
@@ -326,7 +312,7 @@ final class HetznerDriver extends AbstractProvider {
 		if ( 200 !== $response['code'] ) {
 			// Not found is expected if instance was deleted.
 			if ( 404 === $response['code'] ) {
-				return ProviderResult::fail( 'not_found', 'Instance not found on Hetzner.' );
+				return ProviderResult::fail( 'not_found', 'Instance not found on Leaseweb.' );
 			}
 
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to get instance status' );
@@ -334,11 +320,11 @@ final class HetznerDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['server'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from Hetzner API.' );
+		if ( null === $decoded || ! isset( $decoded['state'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
-		$provider_status   = (string) ( $decoded['server']['status'] ?? 'unknown' );
+		$provider_status   = (string) $decoded['state'];
 		$normalized_status = $this->normalise_state( $provider_status );
 
 		return ProviderResult::ok( $normalized_status );
@@ -355,7 +341,9 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return ProviderResult Available plans result.
 	 */
 	public function get_available_plans( ?string $region_slug = null ): ProviderResult {
-		$response = $this->http_request( 'GET', self::API_BASE . '/server_types', $this->get_headers() );
+		$url = self::API_BASE . '/instance-types?limit=100';
+
+		$response = $this->http_request( 'GET', $url, $this->get_headers() );
 
 		if ( $response instanceof ProviderResult ) {
 			return $response;
@@ -367,45 +355,27 @@ final class HetznerDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['server_types'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from Hetzner API.' );
+		if ( null === $decoded || ! isset( $decoded['items'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
 		$plans = array();
-		foreach ( $decoded['server_types'] as $plan ) {
+		foreach ( $decoded['items'] as $plan ) {
 			// Filter by region if requested.
 			if ( null !== $region_slug ) {
-				if ( ! isset( $plan['prices'] ) || ! is_array( $plan['prices'] ) ) {
+				if ( ! isset( $plan['regions'] ) || ! in_array( $region_slug, (array) $plan['regions'], true ) ) {
 					continue;
-				}
-				$found = false;
-				foreach ( $plan['prices'] as $price ) {
-					if ( isset( $price['location'] ) && $price['location'] === $region_slug ) {
-						$found = true;
-						break;
-					}
-				}
-				if ( ! $found ) {
-					continue;
-				}
-			}
-
-			$monthly_price = 0;
-			if ( isset( $plan['prices'] ) && is_array( $plan['prices'] ) && count( $plan['prices'] ) > 0 ) {
-				$first_price = $plan['prices'][0];
-				if ( isset( $first_price['price_monthly'] ) ) {
-					$monthly_price = (float) $first_price['price_monthly'];
 				}
 			}
 
 			$plans[] = array(
-				'slug'          => $plan['name'],
-				'name'          => $plan['description'] ?? '',
-				'cores'         => $plan['cores'] ?? 0,
-				'memory_gb'     => ( $plan['memory'] ?? 0 ) / 1024, // Memory in GB.
-				'disk_gb'       => ( $plan['disk'] ?? 0 ) / 1024, // Disk in GB.
-				'price_monthly' => $monthly_price,
-				'price_hourly'  => $monthly_price > 0 ? ( $monthly_price / 730 ) : 0,
+				'slug'          => $plan['id'],
+				'name'          => $plan['name'] ?? '',
+				'cores'         => $plan['cpu'] ?? 0,
+				'memory_gb'     => ( $plan['memory'] ?? 0 ) / 1024,
+				'disk_gb'       => ( $plan['storage'] ?? 0 ) / 1024,
+				'price_monthly' => (float) ( $plan['price'] ?? 0 ),
+				'price_hourly'  => (float) ( $plan['price'] ?? 0 ) / 730,
 			);
 		}
 
@@ -420,7 +390,7 @@ final class HetznerDriver extends AbstractProvider {
 	public function get_available_regions(): ProviderResult {
 		$response = $this->http_request(
 			'GET',
-			self::API_BASE . '/locations',
+			self::API_BASE . '/regions?limit=100',
 			$this->get_headers()
 		);
 
@@ -434,16 +404,16 @@ final class HetznerDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['locations'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from Hetzner API.' );
+		if ( null === $decoded || ! isset( $decoded['items'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
 		$regions = array();
-		foreach ( $decoded['locations'] as $region ) {
+		foreach ( $decoded['items'] as $region ) {
 			$regions[] = array(
 				'slug'      => $region['id'],
-				'name'      => $region['description'] ?? '',
-				'continent' => $region['continent'] ?? '',
+				'name'      => $region['name'] ?? '',
+				'continent' => '',
 			);
 		}
 
@@ -458,7 +428,7 @@ final class HetznerDriver extends AbstractProvider {
 	public function get_available_images(): ProviderResult {
 		$response = $this->http_request(
 			'GET',
-			self::API_BASE . '/images?type=system',
+			self::API_BASE . '/images?limit=200',
 			$this->get_headers()
 		);
 
@@ -472,16 +442,16 @@ final class HetznerDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['images'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from Hetzner API.' );
+		if ( null === $decoded || ! isset( $decoded['items'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
 		$images = array();
-		foreach ( $decoded['images'] as $image ) {
+		foreach ( $decoded['items'] as $image ) {
 			$images[] = array(
-				'id'   => (string) $image['id'],
+				'id'   => $image['id'] ?? '',
 				'name' => $image['name'] ?? '',
-				'arch' => $image['architecture'] ?? 'x64',
+				'arch' => 'x64',
 			);
 		}
 
@@ -499,8 +469,8 @@ final class HetznerDriver extends AbstractProvider {
 	 */
 	public function get_rate_limits(): array {
 		return array(
-			'max_requests_per_minute' => 60,
-			'burst'                   => 10,
+			'max_requests_per_minute' => 100,
+			'burst'                   => 20,
 		);
 	}
 
@@ -512,13 +482,9 @@ final class HetznerDriver extends AbstractProvider {
 	 */
 	public function normalise_state( string $provider_state ): string {
 		return match ( $provider_state ) {
-			'initializing' => InstanceStatus::PROVISIONING,
-			'starting'     => InstanceStatus::STARTING,
+			'provisioning' => InstanceStatus::PROVISIONING,
 			'running'      => InstanceStatus::ACTIVE,
-			'stopping'     => InstanceStatus::STOPPING,
 			'stopped'      => InstanceStatus::STOPPED,
-			'migrating'    => InstanceStatus::REBUILDING,
-			'resetting'    => InstanceStatus::REBUILDING,
 			'rebooting'    => InstanceStatus::REBOOTING,
 			default        => InstanceStatus::ERROR,
 		};
@@ -529,38 +495,41 @@ final class HetznerDriver extends AbstractProvider {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Returns standard headers for Hetzner API requests.
+	 * Returns standard headers for Leaseweb API requests.
 	 *
 	 * @return array<string, string>
 	 */
 	private function get_headers(): array {
 		return array(
-			'Authorization' => 'Bearer ' . $this->api_token,
+			'Authorization' => 'Bearer ' . $this->api_key,
 		);
 	}
 
 	/**
-	 * Sends a power/reboot command to an instance.
+	 * Sends an action command to a Leaseweb instance.
 	 *
 	 * @param string $instance_id Provider instance ID.
-	 * @param string $command Command name ('power_on', 'power_off', or 'reboot').
+	 * @param string $action Action name ('start', 'stop', or 'reboot').
 	 * @return ProviderResult<ActionResult>
 	 *
-	 * @throws \InvalidArgumentException If command is not one of the accepted constants.
+	 * @throws \InvalidArgumentException If action is not one of the accepted constants.
 	 */
-	private function send_instance_command( string $instance_id, string $command ): ProviderResult {
-		$endpoint = match ( $command ) {
-			'power_on'  => '/servers/' . $instance_id . '/actions/power_on',
-			'power_off' => '/servers/' . $instance_id . '/actions/power_off',
-			'reboot'    => '/servers/' . $instance_id . '/actions/reboot',
-			default     => throw new \InvalidArgumentException(
-				sprintf( 'Unknown instance command: "%s". Valid commands: power_on, power_off, reboot.', esc_attr( $command ) )
-			),
-		};
+	private function send_instance_action( string $instance_id, string $action ): ProviderResult {
+		$action_map = array(
+			'start'  => 'start',
+			'stop'   => 'stop',
+			'reboot' => 'reboot',
+		);
+
+		if ( ! isset( $action_map[ $action ] ) ) {
+			throw new \InvalidArgumentException(
+				sprintf( 'Unknown action: "%s". Valid actions: start, stop, reboot.', esc_attr( $action ) )
+			);
+		}
 
 		$response = $this->http_request(
 			'POST',
-			self::API_BASE . $endpoint,
+			self::API_BASE . '/instances/' . $instance_id . '/actions/' . $action_map[ $action ],
 			$this->get_headers(),
 			array()
 		);
@@ -569,12 +538,12 @@ final class HetznerDriver extends AbstractProvider {
 			return $response;
 		}
 
-		if ( 201 !== $response['code'] ) {
-			$error_msg = $this->extract_error_message( $response['body'], 'Failed to send command to instance' );
+		if ( 200 !== $response['code'] && 201 !== $response['code'] ) {
+			$error_msg = $this->extract_error_message( $response['body'], 'Failed to send action to instance' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
-		return ProviderResult::ok( new ActionResult( provider_action_id: 'hetzner-' . $command . '-' . $instance_id ) );
+		return ProviderResult::ok( new ActionResult( provider_action_id: 'leaseweb-' . $action . '-' . $instance_id ) );
 	}
 
 	/**
@@ -584,15 +553,15 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return string|null
 	 */
 	private function extract_ipv4( array $instance ): ?string {
-		if ( ! isset( $instance['public_net'] ) || ! is_array( $instance['public_net'] ) ) {
-			return null;
+		if ( isset( $instance['ipv4'] ) && ! empty( $instance['ipv4'] ) ) {
+			return $instance['ipv4'];
 		}
 
-		$public_net = $instance['public_net'];
-		if ( isset( $public_net['ipv4'] ) && is_array( $public_net['ipv4'] ) ) {
-			$ipv4_obj = $public_net['ipv4'];
-			if ( isset( $ipv4_obj['ip'] ) && ! empty( $ipv4_obj['ip'] ) ) {
-				return $ipv4_obj['ip'];
+		if ( isset( $instance['ipAddresses'] ) && is_array( $instance['ipAddresses'] ) ) {
+			foreach ( $instance['ipAddresses'] as $ip ) {
+				if ( isset( $ip['version'] ) && 'v4' === $ip['version'] && isset( $ip['ip'] ) && ! empty( $ip['ip'] ) ) {
+					return $ip['ip'];
+				}
 			}
 		}
 
@@ -606,15 +575,15 @@ final class HetznerDriver extends AbstractProvider {
 	 * @return string|null
 	 */
 	private function extract_ipv6( array $instance ): ?string {
-		if ( ! isset( $instance['public_net'] ) || ! is_array( $instance['public_net'] ) ) {
-			return null;
+		if ( isset( $instance['ipv6'] ) && ! empty( $instance['ipv6'] ) ) {
+			return $instance['ipv6'];
 		}
 
-		$public_net = $instance['public_net'];
-		if ( isset( $public_net['ipv6'] ) && is_array( $public_net['ipv6'] ) ) {
-			$ipv6_obj = $public_net['ipv6'];
-			if ( isset( $ipv6_obj['ip'] ) && ! empty( $ipv6_obj['ip'] ) ) {
-				return $ipv6_obj['ip'];
+		if ( isset( $instance['ipAddresses'] ) && is_array( $instance['ipAddresses'] ) ) {
+			foreach ( $instance['ipAddresses'] as $ip ) {
+				if ( isset( $ip['version'] ) && 'v6' === $ip['version'] && isset( $ip['ip'] ) && ! empty( $ip['ip'] ) ) {
+					return $ip['ip'];
+				}
 			}
 		}
 
@@ -622,7 +591,7 @@ final class HetznerDriver extends AbstractProvider {
 	}
 
 	/**
-	 * Extracts error message from Hetzner API response.
+	 * Extracts error message from Leaseweb API response.
 	 *
 	 * @param string $response_body Response body.
 	 * @param string $fallback Fallback message.
@@ -631,11 +600,11 @@ final class HetznerDriver extends AbstractProvider {
 	private function extract_error_message( string $response_body, string $fallback ): string {
 		$decoded = $this->decode_json( $response_body );
 		if ( is_array( $decoded ) ) {
-			if ( isset( $decoded['error'] ) && is_array( $decoded['error'] ) && isset( $decoded['error']['message'] ) ) {
-				return (string) $decoded['error']['message'];
-			}
 			if ( isset( $decoded['message'] ) ) {
 				return (string) $decoded['message'];
+			}
+			if ( isset( $decoded['error'] ) && is_array( $decoded['error'] ) && isset( $decoded['error']['message'] ) ) {
+				return (string) $decoded['error']['message'];
 			}
 		}
 
