@@ -462,7 +462,7 @@ final class VultrDriver extends AbstractProvider
             'power_off' => '/instances/' . $instance_id . '/halt',
             'reboot'   => '/instances/' . $instance_id . '/reboot',
             default    => throw new \InvalidArgumentException(
-                \sprintf('Unknown instance command: "%s". Valid commands: power_on, power_off, reboot.', $command)
+                'Unsupported instance command. Valid commands: power_on, power_off, reboot.'
             ),
         };
 

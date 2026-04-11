@@ -1,12 +1,12 @@
 <?php
 /**
- * DigitalOceanDriver — DigitalOcean (API v2).
+ * LeasewebDriver — Leaseweb (API v1).
  *
- * Implements CloudProviderInterface for DigitalOcean.
+ * Implements CloudProviderInterface for Leaseweb Cloud.
  *
- * Authentication: Authorization Bearer token header.
- * Rate limit: 250 req/min (burst 30).
- * API docs: https://docs.digitalocean.com/reference/api/
+ * Authentication: X-LSW-Auth API key header.
+ * Rate limit: 100 req/min (typical).
+ * API docs: Check .localdocs/openapi.json for exact spec.
  *
  * @package CloudBridge\Provider\Drivers
  */
@@ -23,21 +23,21 @@ use CloudBridge\Provider\DTO\ProvisionResult;
 use CloudBridge\Provider\Result\ProviderResult;
 
 /**
- * DigitalOcean driver (API v2).
+ * Leaseweb driver (API v1).
  *
  * Zero WordPress coupling. Configuration injected via constructor.
  */
-final class DigitalOceanDriver extends AbstractProvider {
+final class LeasewebDriver extends AbstractProvider {
 
-	private const API_BASE = 'https://api.digitalocean.com/v2';
+	private const API_BASE = 'https://api.leaseweb.com/v1';
 
 	/**
 	 * Constructor.
 	 *
-	 * @param string $api_token DigitalOcean API token.
+	 * @param string $api_key Leaseweb API key.
 	 */
 	public function __construct(
-		private readonly string $api_token,
+		private readonly string $api_key,
 	) {
 	}
 
@@ -51,7 +51,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 * @return string Provider identifier.
 	 */
 	public function get_id(): string {
-		return 'digitalocean';
+		return 'leaseweb';
 	}
 
 	/**
@@ -60,7 +60,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 * @return string Human-readable provider label.
 	 */
 	public function get_label(): string {
-		return 'DigitalOcean';
+		return 'Leaseweb';
 	}
 
 	/**
@@ -69,7 +69,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 * @return string Provider API version.
 	 */
 	public function get_api_version(): string {
-		return 'v2';
+		return 'v1';
 	}
 
 	// -------------------------------------------------------------------------
@@ -84,7 +84,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	public function validate_credentials(): ProviderResult {
 		$response = $this->http_request(
 			'GET',
-			self::API_BASE . '/account',
+			self::API_BASE . '/instances?limit=1',
 			$this->get_headers()
 		);
 
@@ -94,10 +94,10 @@ final class DigitalOceanDriver extends AbstractProvider {
 
 		if ( 200 !== $response['code'] ) {
 			if ( in_array( $response['code'], array( 401, 403 ), true ) ) {
-				return ProviderResult::fail( 'auth_failed', 'Invalid or expired DigitalOcean API token.' );
+				return ProviderResult::fail( 'auth_failed', 'Invalid or expired Leaseweb API key.' );
 			}
 
-			$error_msg = $this->extract_error_message( $response['body'], 'Failed to validate DigitalOcean credentials.' );
+			$error_msg = $this->extract_error_message( $response['body'], 'Failed to validate Leaseweb credentials.' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
@@ -137,28 +137,27 @@ final class DigitalOceanDriver extends AbstractProvider {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Provisions a new DigitalOcean instance.
+	 * Provisions a new Leaseweb instance.
 	 *
 	 * @param ProvisionRequest $request Provisioning request payload.
 	 * @return ProviderResult Provisioning result.
 	 */
 	public function provision( ProvisionRequest $request ): ProviderResult {
 		$body = array(
-			'name'        => $request->hostname,
-			'region'      => $request->region_slug,
-			'size'        => $request->plan_slug,
-			'image'       => $request->image_id,
-			'enable_ipv6' => true,
+			'hostname' => $request->hostname,
+			'region'   => $request->region_slug,
+			'type'     => $request->plan_slug,
+			'image'    => $request->image_id,
 		);
 
 		// Add SSH keys if provided.
 		if ( ! empty( $request->ssh_key_ids ) ) {
-			$body['ssh_keys'] = $request->ssh_key_ids;
+			$body['ssh_keys'] = array_map( 'strval', $request->ssh_key_ids );
 		}
 
 		$response = $this->http_request(
 			'POST',
-			self::API_BASE . '/droplets',
+			self::API_BASE . '/instances',
 			$this->get_headers(),
 			$body
 		);
@@ -167,25 +166,23 @@ final class DigitalOceanDriver extends AbstractProvider {
 			return $response;
 		}
 
-		if ( 202 !== $response['code'] ) {
+		if ( 201 !== $response['code'] ) {
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to provision instance' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['droplet'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from DigitalOcean API.' );
+		if ( null === $decoded || ! isset( $decoded['id'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
-		$instance = $decoded['droplet'];
-
-		$ipv4 = $this->extract_ipv4( $instance );
-		$ipv6 = $this->extract_ipv6( $instance );
+		$ipv4 = $this->extract_ipv4( $decoded );
+		$ipv6 = $this->extract_ipv6( $decoded );
 
 		return ProviderResult::ok(
 			new ProvisionResult(
-				provider_instance_id: (string) $instance['id'],
-				provider_status: $instance['status'] ?? 'new',
+				provider_instance_id: (string) $decoded['id'],
+				provider_status: $decoded['state'] ?? 'provisioning',
 				ipv4: $ipv4,
 				ipv6: $ipv6
 			)
@@ -205,7 +202,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	public function destroy( string $provider_instance_id ): ProviderResult {
 		$response = $this->http_request(
 			'DELETE',
-			self::API_BASE . '/droplets/' . $provider_instance_id,
+			self::API_BASE . '/instances/' . $provider_instance_id,
 			$this->get_headers()
 		);
 
@@ -213,13 +210,13 @@ final class DigitalOceanDriver extends AbstractProvider {
 			return $response;
 		}
 
-		// DigitalOcean returns 204 No Content on successful deletion.
+		// Leaseweb returns 204 No Content on successful deletion.
 		if ( 204 !== $response['code'] ) {
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to destroy instance' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
-		return ProviderResult::ok( new ActionResult( provider_action_id: 'do-destroy-' . $provider_instance_id ) );
+		return ProviderResult::ok( new ActionResult( provider_action_id: 'leaseweb-destroy-' . $provider_instance_id ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -233,7 +230,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 * @return ProviderResult Power-on result.
 	 */
 	public function power_on( string $provider_instance_id ): ProviderResult {
-		return $this->send_instance_action( $provider_instance_id, 'power_on' );
+		return $this->send_instance_action( $provider_instance_id, 'start' );
 	}
 
 	/**
@@ -243,7 +240,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 * @return ProviderResult Power-off result.
 	 */
 	public function power_off( string $provider_instance_id ): ProviderResult {
-		return $this->send_instance_action( $provider_instance_id, 'power_off' );
+		return $this->send_instance_action( $provider_instance_id, 'stop' );
 	}
 
 	/**
@@ -269,13 +266,12 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 */
 	public function rebuild( string $provider_instance_id, string $image_id ): ProviderResult {
 		$body = array(
-			'type'  => 'rebuild',
 			'image' => $image_id,
 		);
 
 		$response = $this->http_request(
 			'POST',
-			self::API_BASE . '/droplets/' . $provider_instance_id . '/actions',
+			self::API_BASE . '/instances/' . $provider_instance_id . '/actions/rebuild',
 			$this->get_headers(),
 			$body
 		);
@@ -284,12 +280,12 @@ final class DigitalOceanDriver extends AbstractProvider {
 			return $response;
 		}
 
-		if ( 201 !== $response['code'] ) {
+		if ( 200 !== $response['code'] && 201 !== $response['code'] ) {
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to rebuild instance' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
-		return ProviderResult::ok( new ActionResult( provider_action_id: 'do-rebuild-' . $provider_instance_id ) );
+		return ProviderResult::ok( new ActionResult( provider_action_id: 'leaseweb-rebuild-' . $provider_instance_id ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -305,7 +301,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	public function get_instance_status( string $provider_instance_id ): ProviderResult {
 		$response = $this->http_request(
 			'GET',
-			self::API_BASE . '/droplets/' . $provider_instance_id,
+			self::API_BASE . '/instances/' . $provider_instance_id,
 			$this->get_headers()
 		);
 
@@ -316,7 +312,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 		if ( 200 !== $response['code'] ) {
 			// Not found is expected if instance was deleted.
 			if ( 404 === $response['code'] ) {
-				return ProviderResult::fail( 'not_found', 'Instance not found on DigitalOcean.' );
+				return ProviderResult::fail( 'not_found', 'Instance not found on Leaseweb.' );
 			}
 
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to get instance status' );
@@ -324,11 +320,11 @@ final class DigitalOceanDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['droplet'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from DigitalOcean API.' );
+		if ( null === $decoded || ! isset( $decoded['state'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
-		$provider_status   = (string) ( $decoded['droplet']['status'] ?? 'unknown' );
+		$provider_status   = (string) $decoded['state'];
 		$normalized_status = $this->normalise_state( $provider_status );
 
 		return ProviderResult::ok( $normalized_status );
@@ -345,7 +341,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 * @return ProviderResult Available plans result.
 	 */
 	public function get_available_plans( ?string $region_slug = null ): ProviderResult {
-		$url = self::API_BASE . '/sizes?per_page=250';
+		$url = self::API_BASE . '/instance-types?limit=100';
 
 		$response = $this->http_request( 'GET', $url, $this->get_headers() );
 
@@ -359,32 +355,27 @@ final class DigitalOceanDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['sizes'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from DigitalOcean API.' );
+		if ( null === $decoded || ! isset( $decoded['items'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
 		$plans = array();
-		foreach ( $decoded['sizes'] as $plan ) {
-			// Filter: must be available.
-			if ( ! isset( $plan['available'] ) || ! $plan['available'] ) {
-				continue;
-			}
-
+		foreach ( $decoded['items'] as $plan ) {
 			// Filter by region if requested.
 			if ( null !== $region_slug ) {
-				if ( ! isset( $plan['regions'] ) || ! in_array( $region_slug, $plan['regions'], true ) ) {
+				if ( ! isset( $plan['regions'] ) || ! in_array( $region_slug, (array) $plan['regions'], true ) ) {
 					continue;
 				}
 			}
 
 			$plans[] = array(
-				'slug'          => $plan['slug'],
-				'name'          => $plan['description'] ?? '',
-				'cores'         => $plan['vcpus'] ?? 0,
+				'slug'          => $plan['id'],
+				'name'          => $plan['name'] ?? '',
+				'cores'         => $plan['cpu'] ?? 0,
 				'memory_gb'     => ( $plan['memory'] ?? 0 ) / 1024,
-				'disk_gb'       => $plan['disk'] ?? 0,
-				'price_monthly' => (float) ( $plan['price_monthly'] ?? 0 ),
-				'price_hourly'  => (float) ( $plan['price_hourly'] ?? 0 ),
+				'disk_gb'       => ( $plan['storage'] ?? 0 ) / 1024,
+				'price_monthly' => (float) ( $plan['price'] ?? 0 ),
+				'price_hourly'  => (float) ( $plan['price'] ?? 0 ) / 730,
 			);
 		}
 
@@ -399,7 +390,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	public function get_available_regions(): ProviderResult {
 		$response = $this->http_request(
 			'GET',
-			self::API_BASE . '/regions?per_page=250',
+			self::API_BASE . '/regions?limit=100',
 			$this->get_headers()
 		);
 
@@ -413,19 +404,14 @@ final class DigitalOceanDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['regions'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from DigitalOcean API.' );
+		if ( null === $decoded || ! isset( $decoded['items'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
 		$regions = array();
-		foreach ( $decoded['regions'] as $region ) {
-			// Filter: must be available.
-			if ( ! isset( $region['available'] ) || ! $region['available'] ) {
-				continue;
-			}
-
+		foreach ( $decoded['items'] as $region ) {
 			$regions[] = array(
-				'slug'      => $region['slug'],
+				'slug'      => $region['id'],
 				'name'      => $region['name'] ?? '',
 				'continent' => '',
 			);
@@ -442,7 +428,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	public function get_available_images(): ProviderResult {
 		$response = $this->http_request(
 			'GET',
-			self::API_BASE . '/images?type=distribution&per_page=250',
+			self::API_BASE . '/images?limit=200',
 			$this->get_headers()
 		);
 
@@ -456,16 +442,16 @@ final class DigitalOceanDriver extends AbstractProvider {
 		}
 
 		$decoded = $this->decode_json( $response['body'] );
-		if ( null === $decoded || ! isset( $decoded['images'] ) ) {
-			return ProviderResult::fail( 'api_error', 'Invalid response structure from DigitalOcean API.' );
+		if ( null === $decoded || ! isset( $decoded['items'] ) ) {
+			return ProviderResult::fail( 'api_error', 'Invalid response structure from Leaseweb API.' );
 		}
 
 		$images = array();
-		foreach ( $decoded['images'] as $image ) {
+		foreach ( $decoded['items'] as $image ) {
 			$images[] = array(
-				'id'   => (string) $image['id'],
+				'id'   => $image['id'] ?? '',
 				'name' => $image['name'] ?? '',
-				'arch' => $image['architecture'] ?? 'x64',
+				'arch' => 'x64',
 			);
 		}
 
@@ -483,8 +469,8 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 */
 	public function get_rate_limits(): array {
 		return array(
-			'max_requests_per_minute' => 250,
-			'burst'                   => 30,
+			'max_requests_per_minute' => 100,
+			'burst'                   => 20,
 		);
 	}
 
@@ -496,12 +482,11 @@ final class DigitalOceanDriver extends AbstractProvider {
 	 */
 	public function normalise_state( string $provider_state ): string {
 		return match ( $provider_state ) {
-			'new'      => InstanceStatus::PROVISIONING,
-			'active'   => InstanceStatus::ACTIVE,
-			'off'      => InstanceStatus::STOPPED,
-			'archive'  => InstanceStatus::STOPPED,
-			'power_off' => InstanceStatus::STOPPED,
-			default    => InstanceStatus::ERROR,
+			'provisioning' => InstanceStatus::PROVISIONING,
+			'running'      => InstanceStatus::ACTIVE,
+			'stopped'      => InstanceStatus::STOPPED,
+			'rebooting'    => InstanceStatus::REBOOTING,
+			default        => InstanceStatus::ERROR,
 		};
 	}
 
@@ -510,88 +495,73 @@ final class DigitalOceanDriver extends AbstractProvider {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Returns standard headers for DigitalOcean API requests.
+	 * Returns standard headers for Leaseweb API requests.
 	 *
 	 * @return array<string, string>
 	 */
 	private function get_headers(): array {
 		return array(
-			'Authorization' => 'Bearer ' . $this->api_token,
+			'X-LSW-Auth' => $this->api_key,
 		);
 	}
 
 	/**
-	 * Sends an action command to a droplet.
+	 * Sends an action command to a Leaseweb instance.
 	 *
 	 * @param string $instance_id Provider instance ID.
-	 * @param string $action Action name ('power_on', 'power_off', or 'reboot').
+	 * @param string $action Action name ('start', 'stop', or 'reboot').
 	 * @return ProviderResult<ActionResult>
 	 *
 	 * @throws \InvalidArgumentException If action is not one of the accepted constants.
 	 */
 	private function send_instance_action( string $instance_id, string $action ): ProviderResult {
 		$action_map = array(
-			'power_on'  => 'power_on',
-			'power_off' => 'power_off',
-			'reboot'    => 'reboot',
+			'start'  => 'start',
+			'stop'   => 'stop',
+			'reboot' => 'reboot',
 		);
 
 		if ( ! isset( $action_map[ $action ] ) ) {
 			throw new \InvalidArgumentException(
-				'Unsupported action. Valid actions: power_on, power_off, reboot.'
+				'Unsupported action. Valid actions: start, stop, reboot.'
 			);
 		}
 
-		$body = array(
-			'type' => $action_map[ $action ],
-		);
-
 		$response = $this->http_request(
 			'POST',
-			self::API_BASE . '/droplets/' . $instance_id . '/actions',
+			self::API_BASE . '/instances/' . $instance_id . '/actions/' . $action_map[ $action ],
 			$this->get_headers(),
-			$body
+			array()
 		);
 
 		if ( $response instanceof ProviderResult ) {
 			return $response;
 		}
 
-		if ( 201 !== $response['code'] ) {
+		if ( 200 !== $response['code'] && 201 !== $response['code'] ) {
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to send action to instance' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
 
-		return ProviderResult::ok( new ActionResult( provider_action_id: 'do-' . $action . '-' . $instance_id ) );
+		return ProviderResult::ok( new ActionResult( provider_action_id: 'leaseweb-' . $action . '-' . $instance_id ) );
 	}
 
 	/**
-	 * Extracts IPv4 from droplet networks.
+	 * Extracts IPv4 from instance data.
 	 *
 	 * @param array<string, mixed> $instance Instance data.
 	 * @return string|null
 	 */
 	private function extract_ipv4( array $instance ): ?string {
-		if ( ! isset( $instance['networks'] ) || ! is_array( $instance['networks'] ) ) {
-			return null;
+		if ( isset( $instance['ipv4'] ) && ! empty( $instance['ipv4'] ) ) {
+			return $instance['ipv4'];
 		}
 
-		$networks = $instance['networks'];
-		if ( isset( $networks['v4'] ) && is_array( $networks['v4'] ) && count( $networks['v4'] ) > 0 ) {
-			$ipv4_obj = null;
-			foreach ( $networks['v4'] as $v4_network ) {
-				if ( is_array( $v4_network ) && isset( $v4_network['type'] ) && 'public' === $v4_network['type'] ) {
-					$ipv4_obj = $v4_network;
-					break;
+		if ( isset( $instance['ipAddresses'] ) && is_array( $instance['ipAddresses'] ) ) {
+			foreach ( $instance['ipAddresses'] as $ip ) {
+				if ( isset( $ip['version'] ) && 'v4' === $ip['version'] && isset( $ip['ip'] ) && ! empty( $ip['ip'] ) ) {
+					return $ip['ip'];
 				}
-			}
-
-			if ( null === $ipv4_obj && is_array( $networks['v4'][0] ) ) {
-				$ipv4_obj = $networks['v4'][0];
-			}
-
-			if ( isset( $ipv4_obj['ip_address'] ) && ! empty( $ipv4_obj['ip_address'] ) ) {
-				return $ipv4_obj['ip_address'];
 			}
 		}
 
@@ -599,22 +569,21 @@ final class DigitalOceanDriver extends AbstractProvider {
 	}
 
 	/**
-	 * Extracts IPv6 from droplet networks.
+	 * Extracts IPv6 from instance data.
 	 *
 	 * @param array<string, mixed> $instance Instance data.
 	 * @return string|null
 	 */
 	private function extract_ipv6( array $instance ): ?string {
-		if ( ! isset( $instance['networks'] ) || ! is_array( $instance['networks'] ) ) {
-			return null;
+		if ( isset( $instance['ipv6'] ) && ! empty( $instance['ipv6'] ) ) {
+			return $instance['ipv6'];
 		}
 
-		$networks = $instance['networks'];
-		if ( isset( $networks['v6'] ) && is_array( $networks['v6'] ) && count( $networks['v6'] ) > 0 ) {
-			$ipv6_obj = $networks['v6'][0];
-			if ( isset( $ipv6_obj['ip_address'] ) && ! empty( $ipv6_obj['ip_address'] ) ) {
-				// Return without prefix length.
-				return explode( '/', $ipv6_obj['ip_address'] )[0];
+		if ( isset( $instance['ipAddresses'] ) && is_array( $instance['ipAddresses'] ) ) {
+			foreach ( $instance['ipAddresses'] as $ip ) {
+				if ( isset( $ip['version'] ) && 'v6' === $ip['version'] && isset( $ip['ip'] ) && ! empty( $ip['ip'] ) ) {
+					return $ip['ip'];
+				}
 			}
 		}
 
@@ -622,7 +591,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 	}
 
 	/**
-	 * Extracts error message from DigitalOcean API response.
+	 * Extracts error message from Leaseweb API response.
 	 *
 	 * @param string $response_body Response body.
 	 * @param string $fallback Fallback message.
@@ -634,11 +603,8 @@ final class DigitalOceanDriver extends AbstractProvider {
 			if ( isset( $decoded['message'] ) ) {
 				return (string) $decoded['message'];
 			}
-			if ( isset( $decoded['errors'] ) && is_array( $decoded['errors'] ) && count( $decoded['errors'] ) > 0 ) {
-				$first_error = $decoded['errors'][0];
-				if ( is_array( $first_error ) && isset( $first_error['message'] ) ) {
-					return (string) $first_error['message'];
-				}
+			if ( isset( $decoded['error'] ) && is_array( $decoded['error'] ) && isset( $decoded['error']['message'] ) ) {
+				return (string) $decoded['error']['message'];
 			}
 		}
 
