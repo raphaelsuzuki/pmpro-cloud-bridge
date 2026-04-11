@@ -86,9 +86,9 @@ class DigitalOceanDriverTest extends TestCase
         $this->assertSame(InstanceStatus::ACTIVE, $this->driver->normalise_state('active'));
     }
 
-    public function test_normalise_state_archived(): void
+    public function test_normalise_state_archive(): void
     {
-        $this->assertSame(InstanceStatus::STOPPED, $this->driver->normalise_state('archived'));
+        $this->assertSame(InstanceStatus::STOPPED, $this->driver->normalise_state('archive'));
     }
 
     public function test_normalise_state_off(): void

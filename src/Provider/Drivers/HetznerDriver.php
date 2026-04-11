@@ -224,8 +224,8 @@ final class HetznerDriver extends AbstractProvider {
 			return $response;
 		}
 
-		// Hetzner returns 204 No Content on successful deletion.
-		if ( 204 !== $response['code'] ) {
+		// Hetzner returns 200 with an action object on successful deletion.
+		if ( 200 !== $response['code'] ) {
 			$error_msg = $this->extract_error_message( $response['body'], 'Failed to destroy instance' );
 			return ProviderResult::fail( 'api_error', $error_msg );
 		}
@@ -393,8 +393,8 @@ final class HetznerDriver extends AbstractProvider {
 			$monthly_price = 0;
 			if ( isset( $plan['prices'] ) && is_array( $plan['prices'] ) && count( $plan['prices'] ) > 0 ) {
 				$first_price = $plan['prices'][0];
-				if ( isset( $first_price['price_monthly'] ) ) {
-					$monthly_price = (float) $first_price['price_monthly'];
+				if ( isset( $first_price['price_monthly'] ) && is_array( $first_price['price_monthly'] ) ) {
+					$monthly_price = (float) ( $first_price['price_monthly']['gross'] ?? $first_price['price_monthly']['net'] ?? 0 );
 				}
 			}
 
@@ -402,8 +402,8 @@ final class HetznerDriver extends AbstractProvider {
 				'slug'          => $plan['name'],
 				'name'          => $plan['description'] ?? '',
 				'cores'         => $plan['cores'] ?? 0,
-				'memory_gb'     => ( $plan['memory'] ?? 0 ) / 1024, // Memory in GB.
-				'disk_gb'       => ( $plan['disk'] ?? 0 ) / 1024, // Disk in GB.
+				'memory_gb'     => (float) ( $plan['memory'] ?? 0 ),
+				'disk_gb'       => (int) ( $plan['disk'] ?? 0 ),
 				'price_monthly' => $monthly_price,
 				'price_hourly'  => $monthly_price > 0 ? ( $monthly_price / 730 ) : 0,
 			);

@@ -1,10 +1,10 @@
 <?php
 /**
- * LeasewebDriver — Leaseweb (API v2).
+ * LeasewebDriver — Leaseweb (API v1).
  *
  * Implements CloudProviderInterface for Leaseweb Cloud.
  *
- * Authentication: Authorization Bearer token header.
+ * Authentication: X-LSW-Auth API key header.
  * Rate limit: 100 req/min (typical).
  * API docs: Check .localdocs/openapi.json for exact spec.
  *
@@ -23,13 +23,13 @@ use CloudBridge\Provider\DTO\ProvisionResult;
 use CloudBridge\Provider\Result\ProviderResult;
 
 /**
- * Leaseweb driver (API v2).
+ * Leaseweb driver (API v1).
  *
  * Zero WordPress coupling. Configuration injected via constructor.
  */
 final class LeasewebDriver extends AbstractProvider {
 
-	private const API_BASE = 'https://api.leaseweb.com/v2';
+	private const API_BASE = 'https://api.leaseweb.com/v1';
 
 	/**
 	 * Constructor.
@@ -69,7 +69,7 @@ final class LeasewebDriver extends AbstractProvider {
 	 * @return string Provider API version.
 	 */
 	public function get_api_version(): string {
-		return 'v2';
+		return 'v1';
 	}
 
 	// -------------------------------------------------------------------------
@@ -501,7 +501,7 @@ final class LeasewebDriver extends AbstractProvider {
 	 */
 	private function get_headers(): array {
 		return array(
-			'Authorization' => 'Bearer ' . $this->api_key,
+			'X-LSW-Auth' => $this->api_key,
 		);
 	}
 

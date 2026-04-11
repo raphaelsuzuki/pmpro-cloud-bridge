@@ -153,7 +153,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 
 		// Add SSH keys if provided.
 		if ( ! empty( $request->ssh_key_ids ) ) {
-			$body['ssh_keys'] = array_map( 'intval', $request->ssh_key_ids );
+			$body['ssh_keys'] = $request->ssh_key_ids;
 		}
 
 		$response = $this->http_request(
@@ -499,7 +499,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 			'new'      => InstanceStatus::PROVISIONING,
 			'active'   => InstanceStatus::ACTIVE,
 			'off'      => InstanceStatus::STOPPED,
-			'archived' => InstanceStatus::STOPPED,
+			'archive'  => InstanceStatus::STOPPED,
 			'power_off' => InstanceStatus::STOPPED,
 			default    => InstanceStatus::ERROR,
 		};
@@ -578,7 +578,18 @@ final class DigitalOceanDriver extends AbstractProvider {
 
 		$networks = $instance['networks'];
 		if ( isset( $networks['v4'] ) && is_array( $networks['v4'] ) && count( $networks['v4'] ) > 0 ) {
-			$ipv4_obj = $networks['v4'][0];
+			$ipv4_obj = null;
+			foreach ( $networks['v4'] as $v4_network ) {
+				if ( is_array( $v4_network ) && isset( $v4_network['type'] ) && 'public' === $v4_network['type'] ) {
+					$ipv4_obj = $v4_network;
+					break;
+				}
+			}
+
+			if ( null === $ipv4_obj && is_array( $networks['v4'][0] ) ) {
+				$ipv4_obj = $networks['v4'][0];
+			}
+
 			if ( isset( $ipv4_obj['ip_address'] ) && ! empty( $ipv4_obj['ip_address'] ) ) {
 				return $ipv4_obj['ip_address'];
 			}

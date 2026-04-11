@@ -96,6 +96,26 @@ class LinodeDriverTest extends TestCase
         $this->assertSame(InstanceStatus::STOPPED, $this->driver->normalise_state('offline'));
     }
 
+    public function test_normalise_state_booting(): void
+    {
+        $this->assertSame(InstanceStatus::STARTING, $this->driver->normalise_state('booting'));
+    }
+
+    public function test_normalise_state_shutting_down(): void
+    {
+        $this->assertSame(InstanceStatus::STOPPING, $this->driver->normalise_state('shutting_down'));
+    }
+
+    public function test_normalise_state_rebooting(): void
+    {
+        $this->assertSame(InstanceStatus::REBOOTING, $this->driver->normalise_state('rebooting'));
+    }
+
+    public function test_normalise_state_rebuilding(): void
+    {
+        $this->assertSame(InstanceStatus::REBUILDING, $this->driver->normalise_state('rebuilding'));
+    }
+
     public function test_normalise_state_unknown_state(): void
     {
         $this->assertSame(InstanceStatus::ERROR, $this->driver->normalise_state('unknown_state'));

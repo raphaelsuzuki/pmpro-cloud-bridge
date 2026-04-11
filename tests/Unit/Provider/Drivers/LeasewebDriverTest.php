@@ -47,7 +47,7 @@ class LeasewebDriverTest extends TestCase
     {
         $this->assertSame('leaseweb', $this->driver->get_id());
         $this->assertSame('Leaseweb', $this->driver->get_label());
-        $this->assertSame('v2', $this->driver->get_api_version());
+        $this->assertSame('v1', $this->driver->get_api_version());
     }
 
     /**

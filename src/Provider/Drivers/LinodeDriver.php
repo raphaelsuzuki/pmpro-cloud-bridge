@@ -144,10 +144,10 @@ final class LinodeDriver extends AbstractProvider {
 	 */
 	public function provision( ProvisionRequest $request ): ProviderResult {
 		$body = array(
-			'label'   => $request->hostname,
-			'region'  => $request->region_slug,
-			'type_id' => $request->plan_slug,
-			'image'   => $request->image_id,
+			'label'  => $request->hostname,
+			'region' => $request->region_slug,
+			'type'   => $request->plan_slug,
+			'image'  => $request->image_id,
 		);
 
 		// Add SSH keys if provided.
@@ -266,12 +266,13 @@ final class LinodeDriver extends AbstractProvider {
 	 */
 	public function rebuild( string $provider_instance_id, string $image_id ): ProviderResult {
 		$body = array(
-			'image' => $image_id,
+			'image'     => $image_id,
+			'root_pass' => $this->generate_root_password(),
 		);
 
 		$response = $this->http_request(
 			'POST',
-			self::API_BASE . '/linode/instances/' . $provider_instance_id . '/actions?action=rebuild',
+			self::API_BASE . '/linode/instances/' . $provider_instance_id . '/rebuild',
 			$this->get_headers(),
 			$body
 		);
@@ -476,9 +477,13 @@ final class LinodeDriver extends AbstractProvider {
 	public function normalise_state( string $provider_state ): string {
 		return match ( $provider_state ) {
 			'provisioning' => InstanceStatus::PROVISIONING,
+			'booting'      => InstanceStatus::STARTING,
 			'running'      => InstanceStatus::ACTIVE,
+			'shutting_down' => InstanceStatus::STOPPING,
 			'stopped'      => InstanceStatus::STOPPED,
 			'offline'      => InstanceStatus::STOPPED,
+			'rebooting'    => InstanceStatus::REBOOTING,
+			'rebuilding'   => InstanceStatus::REBUILDING,
 			default        => InstanceStatus::ERROR,
 		};
 	}
@@ -509,8 +514,8 @@ final class LinodeDriver extends AbstractProvider {
 	 */
 	private function send_instance_action( string $instance_id, string $action ): ProviderResult {
 		$action_map = array(
-			'power_on'  => 'power_on',
-			'power_off' => 'power_off',
+			'power_on'  => 'boot',
+			'power_off' => 'shutdown',
 			'reboot'    => 'reboot',
 		);
 
@@ -520,10 +525,9 @@ final class LinodeDriver extends AbstractProvider {
 			);
 		}
 
-		$query_action = $action_map[ $action ];
-		$response     = $this->http_request(
+		$response = $this->http_request(
 			'POST',
-			self::API_BASE . '/linode/instances/' . $instance_id . '/actions?action=' . $query_action,
+			self::API_BASE . '/linode/instances/' . $instance_id . '/' . $action_map[ $action ],
 			$this->get_headers(),
 			array()
 		);
@@ -607,12 +611,24 @@ final class LinodeDriver extends AbstractProvider {
 		if ( is_array( $decoded ) ) {
 			if ( isset( $decoded['errors'] ) && is_array( $decoded['errors'] ) && count( $decoded['errors'] ) > 0 ) {
 				$first_error = $decoded['errors'][0];
-				if ( is_array( $first_error ) && isset( $first_error['field'] ) && isset( $first_error['reason'] ) ) {
-					return $first_error['field'] . ': ' . $first_error['reason'];
+				if ( is_array( $first_error ) && isset( $first_error['reason'] ) ) {
+					$prefix = isset( $first_error['field'] ) ? $first_error['field'] . ': ' : '';
+					return $prefix . $first_error['reason'];
 				}
 			}
 		}
 
 		return $fallback;
+	}
+
+	/**
+	 * Generates a Linode-compatible root password for rebuild operations.
+	 *
+	 * @return string
+	 */
+	private function generate_root_password(): string {
+		$random_bytes = bin2hex( random_bytes( 12 ) );
+
+		return 'Cb!' . $random_bytes . '9z';
 	}
 }
