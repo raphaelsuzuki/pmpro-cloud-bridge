@@ -6,3 +6,15 @@ PMPro-Cloud-Manager-Spec-v1.0(2).html
 .phpunit.result.cache
 .vscode/
 .localdocs/
+.env
+.env.*
+*.env
+*.local.php
+credentials.json
+credentials-*.json
+secrets.json
+secrets-*.json
+*.pem
+*.p12
+*.pfx
+*.key

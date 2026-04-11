@@ -68,8 +68,8 @@ final class Plugin {
 		// Must run on the init action at a later priority so CPTs exist first.
 		\add_action( 'init', [ self::class, 'maybe_flush_rewrite_rules' ], 20 );
 
-// Register all cloud provider drivers.
-ProviderBootstrap::init();
+		// Register provider bootstrap after WordPress core hook functions are ready.
+		\add_action( 'init', [ ProviderBootstrap::class, 'init' ], 5 );
 	}
 
 	/**

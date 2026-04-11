@@ -527,7 +527,7 @@ final class ContaboDriver extends AbstractProvider {
 
 		if ( ! isset( $action_map[ $action ] ) ) {
 			throw new \InvalidArgumentException(
-				sprintf( 'Unknown action: "%s". Valid actions: start, stop, restart.', esc_attr( $action ) )
+				'Unsupported action. Valid actions: start, stop, restart.'
 			);
 		}
 

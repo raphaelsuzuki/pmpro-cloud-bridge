@@ -36,6 +36,10 @@ final class ProviderBootstrap {
 	 * @return void
 	 */
 	public static function init(): void {
+		if ( ! \function_exists( 'add_filter' ) ) {
+			return;
+		}
+
 		\add_filter(
 			'cloud_bridge_providers',
 			array( self::class, 'register_providers' ),

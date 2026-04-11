@@ -554,7 +554,7 @@ final class HetznerDriver extends AbstractProvider {
 			'power_off' => '/servers/' . $instance_id . '/actions/power_off',
 			'reboot'    => '/servers/' . $instance_id . '/actions/reboot',
 			default     => throw new \InvalidArgumentException(
-				sprintf( 'Unknown instance command: "%s". Valid commands: power_on, power_off, reboot.', esc_attr( $command ) )
+				'Unsupported instance command. Valid commands: power_on, power_off, reboot.'
 			),
 		};
 

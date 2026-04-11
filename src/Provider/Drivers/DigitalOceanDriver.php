@@ -538,7 +538,7 @@ final class DigitalOceanDriver extends AbstractProvider {
 
 		if ( ! isset( $action_map[ $action ] ) ) {
 			throw new \InvalidArgumentException(
-				sprintf( 'Unknown action: "%s". Valid actions: power_on, power_off, reboot.', esc_attr( $action ) )
+				'Unsupported action. Valid actions: power_on, power_off, reboot.'
 			);
 		}
 
